@@ -5,38 +5,61 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 function main() {
-    // Ensure the script is run from the root of a git repository
-    let repoRoot;
-    try {
-        repoRoot = execSync('git rev-parse --show-toplevel').toString().trim();
-    } catch (e) {
-        console.error('This script must be run within a git repository.');
+    const originalCwd = process.cwd();
+    const targetArg = process.argv[2];
+    
+    // 1. Determine the correct directory to discover the git repo from.
+    let discoveryPath = originalCwd;
+    if (targetArg) {
+        discoveryPath = path.resolve(originalCwd, targetArg);
+    }
+
+    if (!fs.existsSync(discoveryPath)) {
+        console.error(`Error: Path does not exist: ${discoveryPath}`);
         process.exit(1);
     }
     
-    // It's easier if we run all commands from the repo root
+    // Determine the path to run git commands from (it must be a directory).
+    const isDirectory = fs.statSync(discoveryPath).isDirectory();
+    const gitCommandPath = isDirectory ? discoveryPath : path.dirname(discoveryPath);
+
+    // 2. Find the repository root from that path.
+    let repoRoot;
+    try {
+        repoRoot = execSync('git rev-parse --show-toplevel', { cwd: gitCommandPath, stdio: 'pipe' }).toString().trim();
+    } catch (e) {
+        console.error(`Error: Could not find a git repository at or above the path: ${gitCommandPath}`);
+        process.exit(1);
+    }
+
+    // 3. Change into the correct repository root for all subsequent commands.
     process.chdir(repoRoot);
 
     const repoName = path.basename(repoRoot);
+    
+    // Determine the final path for `git ls-files`, which should be relative to the repo root.
+    const finalTargetPath = path.relative(repoRoot, discoveryPath);
+
+    const filesCommand = `git ls-files -- ${finalTargetPath || '.'}`;
 
     // Print CSV header
     console.log('repository_name,file_path,file_name,committer_email,lines_for_committer,total_lines');
 
-    // Get all tracked files
-    const files = execSync('git ls-files').toString().trim().split('\n');
+    // Get all tracked files within the target path
+    const filesOutput = execSync(filesCommand).toString().trim();
+    const files = filesOutput ? filesOutput.split('\n') : [];
 
     for (const file of files) {
         // Skip empty lines from split
         if (!file) continue;
 
-        // Stat the file to ensure it exists and is a file, not a directory or submodule
+        // Stat the file to ensure it exists and is a file
         try {
             const stat = fs.statSync(file);
             if (!stat.isFile() || stat.size === 0) {
                 continue;
             }
         } catch (e) {
-            // This can happen if a file from `ls-files` is deleted during script execution
             continue;
         }
 
@@ -44,12 +67,10 @@ function main() {
         const totalLines = fs.readFileSync(file, 'utf-8').split('\n').length;
 
         try {
-            // Buffer might need to be large for files with long history
             const blameOutput = execSync(`git blame --line-porcelain -- "${file}"`, { maxBuffer: 1024 * 1024 * 50 }).toString();
             const authorCounts = new Map<string, number>();
 
             const blameLines = blameOutput.trim().split('\n');
-            // Iterate through the blame output to find author lines
             for (const blameLine of blameLines) {
                 if (blameLine.startsWith('author-mail ')) {
                     const email = blameLine.substring('author-mail '.length);
@@ -57,14 +78,12 @@ function main() {
                 }
             }
             
-            // Print a CSV row for each author found in the file's blame
             for (const [email, count] of authorCounts.entries()) {
                 console.log(`${repoName},"${file}","${fileName}",${email},${count},${totalLines}`);
             }
 
         } catch (e) {
-            // Silently skip files that cause errors (e.g., binary files, files with complex history)
-            // console.error(`Failed to process ${file}: ${e}`);
+            // Silently skip files that cause errors
         }
     }
 }
