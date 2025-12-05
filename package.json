@@ -1,0 +1,19 @@
+{
+  "name": "git-blame-stats-cli",
+  "version": "1.0.0",
+  "description": "A CLI to generate git blame stats for a repository",
+  "main": "dist/blame-stats.js",
+  "bin": {
+    "git-blame-stats": "dist/blame-stats.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
