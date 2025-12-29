@@ -245,9 +245,20 @@ function gatherAllLineBlames(args: CliArgs): { lineBlames: LineBlame[], repoRoot
     const files = filesOutput ? filesOutput.split('\n') : [];
 
     const allLineBlames: LineBlame[] = [];
+    const totalFiles = files.length;
+    let processedCount = 0;
+
+    console.error(`Found ${totalFiles} files to analyze...`);
 
     for (const file of files) {
-        if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile() || fs.statSync(file).size === 0) continue;
+        processedCount++;
+        const progressMessage = `[${processedCount}/${totalFiles}] Analyzing: ${file}`;
+        // Pad the message to overwrite the previous line completely, then add a carriage return
+        process.stderr.write(progressMessage.padEnd(process.stderr.columns || 80, ' ') + '\r');
+
+        if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile() || fs.statSync(file).size === 0) {
+            continue;
+        }
 
         try {
             const blameOutput = execSync(`git blame --line-porcelain -- "${file}"`, { maxBuffer: 1024 * 1024 * 50 }).toString();
@@ -280,9 +291,14 @@ function gatherAllLineBlames(args: CliArgs): { lineBlames: LineBlame[], repoRoot
                 });
             }
         } catch (e) {
-            // Silently skip files that error (e.g., binary files)
+            // Silently skip files that error (e.g., binary files) to not disrupt the progress bar
         }
     }
+    
+    // Clear the progress line and print a final message
+    process.stderr.write(' '.repeat(process.stderr.columns || 80) + '\r');
+    console.error(`Analysis complete. Processed ${totalFiles} files.`);
+
     return { lineBlames: allLineBlames, repoRoot, originalCwd };
 }
 
