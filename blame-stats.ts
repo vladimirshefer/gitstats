@@ -441,7 +441,10 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
                 indexAxis: 'y', 
                 scales: { 
                     x: { stacked: true, beginAtZero: true },
-                    y: { stacked: true } 
+                    y: { 
+                        stacked: true,
+                        ticks: { autoSkip: false }
+                    } 
                 },
                 plugins: {
                     tooltip: {
@@ -474,7 +477,13 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
                     borderWidth: 1
                 }]
             },
-            options: { indexAxis: 'y', scales: { x: { beginAtZero: true } } }
+            options: { 
+                indexAxis: 'y', 
+                scales: { 
+                    x: { beginAtZero: true },
+                    y: { ticks: { autoSkip: false } }
+                } 
+            }
         });
     </script>
 </body>
