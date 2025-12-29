@@ -11,11 +11,11 @@
  *
  * To run the script, use the following command structure from your terminal:
  *
- *   npx ts-node blame-stats.ts [path] [--html [output_filename]]
+ *   npx ts-node blame-stats.ts [path] [--html [output_filename]] [--filename <glob>]...
  *
  *   or if compiled to javascript
  *
- *   node blame-stats.js [path] [--html [output_filename]]
+ *   node blame-stats.js [path] [--html [output_filename]] [--filename <glob>]... [--exclude-filename <glob>]...
  *
  *
  * Parameters:
@@ -28,6 +28,18 @@
  *     - If this flag is present, the script will generate a visual HTML report.
  *     - If `[output_filename]` is provided, the report will be saved to that file.
  *     - If the filename is omitted, it defaults to 'git-blame-stats-report.html'.
+ * 
+ *   --filename <glob> (optional, repeatable)
+ *     - Filters the files to be analyzed, including only files that match the glob pattern.
+ *     - To use wildcards, enclose the pattern in quotes (e.g., `'*.ts'`).
+ *     - You can use this option multiple times to include multiple patterns.
+ *     - Example: --filename '*.ts' --filename '*.js'
+ *
+ *   --exclude-filename <glob> (optional, repeatable)
+ *     - Excludes files matching the glob pattern from the analysis.
+ *     - To use wildcards, enclose the pattern in quotes (e.g., `'*.json'`).
+ *     - This is processed after any `--filename` filters.
+ *     - Example: --exclude-filename '*.json' --exclude-filename 'dist/*'
  *
  * --- Behavior ---
  *
@@ -80,13 +92,15 @@ interface AggregatedUserStats {
 interface CliArgs {
     targetPath: string;
     htmlOutputFile?: string;
+    filenameGlobs?: string[];
+    excludeGlobs?: string[];
 }
 
 // --- Main Application Logic ---
 
 function main() {
     const args = parseArgs();
-    const { records, repoRoot, originalCwd } = gatherRepoData(args.targetPath);
+    const { records, repoRoot, originalCwd } = gatherRepoData(args);
     
     if (args.htmlOutputFile) {
         const aggregatedData = aggregateDataForHtml(records);
@@ -102,7 +116,10 @@ function main() {
  */
 function parseArgs(): CliArgs {
     const cliArgs = process.argv.slice(2);
-    const result: Partial<CliArgs> = {};
+    const result: Partial<CliArgs> = {
+        filenameGlobs: [],
+        excludeGlobs: []
+    };
     
     for (let i = 0; i < cliArgs.length; i++) {
         const arg = cliArgs[i];
@@ -110,7 +127,20 @@ function parseArgs(): CliArgs {
             const nextArg = cliArgs[i + 1];
             result.htmlOutputFile = (nextArg && !nextArg.startsWith('-')) ? nextArg : 'git-blame-stats-report.html';
             if (result.htmlOutputFile === nextArg) i++; // Consume the filename argument
-        } else if (!arg.startsWith('-')) {
+        } else if (arg === '--filename') {
+            const nextArg = cliArgs[i + 1];
+            if (nextArg && !nextArg.startsWith('-')) {
+                result.filenameGlobs!.push(nextArg);
+                i++;
+            }
+        } else if (arg === '--exclude-filename') {
+            const nextArg = cliArgs[i + 1];
+            if (nextArg && !nextArg.startsWith('-')) {
+                result.excludeGlobs!.push(nextArg);
+                i++;
+            }
+        }
+        else if (!arg.startsWith('-')) {
             if (!result.targetPath) result.targetPath = arg;
         }
     }
@@ -124,7 +154,8 @@ type LineBlameInfo = { username: string; time: number };
 /**
  * Gathers blame statistics for all relevant files in the repository.
  */
-function gatherRepoData(targetPath: string): { records: BlameRecord[], repoRoot: string, originalCwd: string } {
+function gatherRepoData(args: CliArgs): { records: BlameRecord[], repoRoot: string, originalCwd: string } {
+    const { targetPath, filenameGlobs, excludeGlobs } = args;
     const originalCwd = process.cwd();
     const discoveryPath = path.resolve(originalCwd, targetPath);
 
@@ -146,7 +177,14 @@ function gatherRepoData(targetPath: string): { records: BlameRecord[], repoRoot:
     process.chdir(repoRoot);
     
     const finalTargetPath = path.relative(repoRoot, discoveryPath);
-    const filesCommand = `git ls-files -- ${finalTargetPath || '.'}`;
+    const includePathspecs = (filenameGlobs && filenameGlobs.length > 0)
+        ? filenameGlobs.map(g => `'${g}'`).join(' ')
+        : '';
+    const excludePathspecs = (excludeGlobs && excludeGlobs.length > 0)
+        ? excludeGlobs.map(g => `':!${g}'`).join(' ')
+        : '';
+
+    const filesCommand = `git ls-files -- "${finalTargetPath || '.'}" ${includePathspecs} ${excludePathspecs}`;
     const filesOutput = execSync(filesCommand).toString().trim();
     const files = filesOutput ? filesOutput.split('\n') : [];
 
@@ -162,7 +200,7 @@ function gatherRepoData(targetPath: string): { records: BlameRecord[], repoRoot:
         try {
             const blameOutput = execSync(`git blame --line-porcelain -- "${file}"`, { maxBuffer: 1024 * 1024 * 50 }).toString();
             const authorCounts = new Map<string, number>();
-            
+
             const blameLines = blameOutput.trim().split('\n');
             const lineInfos: LineBlameInfo[] = [];
             let currentInfo: Partial<LineBlameInfo> = {};
@@ -190,7 +228,7 @@ function gatherRepoData(targetPath: string): { records: BlameRecord[], repoRoot:
                 }
                 authorCounts.set(authorToCredit, (authorCounts.get(authorToCredit) || 0) + 1);
             }
-            
+
             for (const [username, count] of authorCounts.entries()) {
                 allRecords.push({
                     filePath: file,
@@ -323,8 +361,6 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
                 datasets: [{
                     label: 'Lines of Code',
                     data: ${linesData},
-                    backgroundColor: 'rgba(0, 123, 255, 0.7)',
-                    borderColor: 'rgba(0, 123, 255, 1)',
                     borderWidth: 1
                 }]
             },
@@ -339,8 +375,6 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
                 datasets: [{
                     label: 'Files Touched',
                     data: ${filesData},
-                    backgroundColor: 'rgba(40, 167, 69, 0.7)',
-                    borderColor: 'rgba(40, 167, 69, 1)',
                     borderWidth: 1
                 }]
             },
