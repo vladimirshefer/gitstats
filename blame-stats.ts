@@ -85,6 +85,8 @@ interface AggregatedUserStats {
     linesLast7Days: number;
     linesLast30Days: number;
     linesLast365Days: number;
+    linesLast5Years: number;
+    linesLast10Years: number;
     linesOlder: number;
     totalLines: number;
     fileCount: number;
@@ -294,7 +296,9 @@ function aggregateDataForHtml(lineBlames: LineBlame[]): AggregatedUserStats[] {
     const now = Math.floor(Date.now() / 1000);
     const sevenDaysAgo = now - 7 * 24 * 60 * 60;
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60;
-    const threeSixtyFiveDaysAgo = now - 365 * 24 * 60 * 60;
+    const oneYearAgo = now - 365 * 24 * 60 * 60;
+    const fiveYearsAgo = now - 5 * 365 * 24 * 60 * 60;
+    const tenYearsAgo = now - 10 * 365 * 24 * 60 * 60;
 
     for (const line of lineBlames) {
         if (!userStats.has(line.username)) {
@@ -303,6 +307,8 @@ function aggregateDataForHtml(lineBlames: LineBlame[]): AggregatedUserStats[] {
                 linesLast7Days: 0,
                 linesLast30Days: 0,
                 linesLast365Days: 0,
+                linesLast5Years: 0,
+                linesLast10Years: 0,
                 linesOlder: 0,
                 totalLines: 0, 
                 fileCount: 0,
@@ -317,8 +323,12 @@ function aggregateDataForHtml(lineBlames: LineBlame[]): AggregatedUserStats[] {
             stats.linesLast7Days++;
         } else if (line.time >= thirtyDaysAgo) {
             stats.linesLast30Days++;
-        } else if (line.time >= threeSixtyFiveDaysAgo) {
+        } else if (line.time >= oneYearAgo) {
             stats.linesLast365Days++;
+        } else if (line.time >= fiveYearsAgo) {
+            stats.linesLast5Years++;
+        } else if (line.time >= tenYearsAgo) {
+            stats.linesLast10Years++;
         } else {
             stats.linesOlder++;
         }
@@ -353,6 +363,8 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
     const linesLast7 = JSON.stringify(chartData.map(u => u.linesLast7Days));
     const linesLast30 = JSON.stringify(chartData.map(u => u.linesLast30Days));
     const linesLast365 = JSON.stringify(chartData.map(u => u.linesLast365Days));
+    const linesLast5Years = JSON.stringify(chartData.map(u => u.linesLast5Years));
+    const linesLast10Years = JSON.stringify(chartData.map(u => u.linesLast10Years));
     const linesOlder = JSON.stringify(chartData.map(u => u.linesOlder));
 
     const filesData = JSON.stringify(chartData.map(u => u.fileCount));
@@ -364,6 +376,8 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
             <td class="num">${u.linesLast7Days.toLocaleString()}</td>
             <td class="num">${u.linesLast30Days.toLocaleString()}</td>
             <td class="num">${u.linesLast365Days.toLocaleString()}</td>
+            <td class="num">${u.linesLast5Years.toLocaleString()}</td>
+            <td class="num">${u.linesLast10Years.toLocaleString()}</td>
             <td class="num">${u.linesOlder.toLocaleString()}</td>
             <td class="num">${u.fileCount.toLocaleString()}</td>
         </tr>
@@ -414,8 +428,10 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
                     <th class="num">Total Lines</th>
                     <th class="num">< 7 days</th>
                     <th class="num">8-30 days</th>
-                    <th class="num">31-365 days</th>
-                    <th class="num">> 365 days</th>
+                    <th class="num">< 1 year</th>
+                    <th class="num">Last 5 Years</th>
+                    <th class="num">Last 10 Years</th>
+                    <th class="num">Older</th>
                     <th class="num">Files Touched</th>
                 </tr>
             </thead>
@@ -425,16 +441,21 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
         </table>
     </div>
     <script>
+        const chartData = ${JSON.stringify(chartData)};
+        const userMap = new Map(chartData.map(u => [u.username, u]));
+
         const ctxLines = document.getElementById('linesChart').getContext('2d');
-        new Chart(ctxLines, {
+        const linesChart = new Chart(ctxLines, {
             type: 'bar',
             data: {
                 labels: ${labels},
                 datasets: [
-                    { label: '< 7 days', data: ${linesLast7}, backgroundColor: 'rgba(255, 99, 132, 0.7)' },
-                    { label: '8-30 days', data: ${linesLast30}, backgroundColor: 'rgba(54, 162, 235, 0.7)' },
-                    { label: '31-365 days', data: ${linesLast365}, backgroundColor: 'rgba(255, 206, 86, 0.7)' },
-                    { label: '> 365 days', data: ${linesOlder}, backgroundColor: 'rgba(201, 203, 207, 0.7)' }
+                    { label: '< 7 days', data: ${linesLast7}, backgroundColor: 'rgba(214, 40, 40, 0.7)' },
+                    { label: '8-30 days', data: ${linesLast30}, backgroundColor: 'rgba(247, 127, 0, 0.7)' },
+                    { label: '< 1 year', data: ${linesLast365}, backgroundColor: 'rgba(252, 191, 73, 0.7)' },
+                    { label: 'Last 5 Years', data: ${linesLast5Years}, backgroundColor: 'rgba(54, 162, 235, 0.7)' },
+                    { label: 'Last 10 Years', data: ${linesLast10Years}, backgroundColor: 'rgba(153, 102, 255, 0.7)' },
+                    { label: 'Older', data: ${linesOlder}, backgroundColor: 'rgba(201, 203, 207, 0.7)' }
                 ]
             },
             options: { 
@@ -447,6 +468,53 @@ function generateHtmlReport(data: AggregatedUserStats[], outputFile: string, ori
                     } 
                 },
                 plugins: {
+                    legend: {
+                        onClick: (e, legendItem, legend) => {
+                            // Default behavior to toggle visibility
+                            Chart.defaults.plugins.legend.onClick(e, legendItem, legend);
+
+                            const chart = legend.chart;
+                            
+                            // Determine which datasets are visible
+                            const visibilities = chart.data.datasets.map((_, i) => chart.isDatasetVisible(i));
+                            
+                            // Get the user data objects in the current order from the chart
+                            const usersToSort = chart.data.labels.map(label => userMap.get(label));
+
+                            // Sort the users based on the sum of their visible data
+                            usersToSort.sort((a, b) => {
+                                let totalA = 0;
+                                let totalB = 0;
+
+                                if (visibilities[0]) totalA += a.linesLast7Days;
+                                if (visibilities[1]) totalA += a.linesLast30Days;
+                                if (visibilities[2]) totalA += a.linesLast365Days;
+                                if (visibilities[3]) totalA += a.linesLast5Years;
+                                if (visibilities[4]) totalA += a.linesLast10Years;
+                                if (visibilities[5]) totalA += a.linesOlder;
+
+                                if (visibilities[0]) totalB += b.linesLast7Days;
+                                if (visibilities[1]) totalB += b.linesLast30Days;
+                                if (visibilities[2]) totalB += b.linesLast365Days;
+                                if (visibilities[3]) totalB += b.linesLast5Years;
+                                if (visibilities[4]) totalB += b.linesLast10Years;
+                                if (visibilities[5]) totalB += b.linesOlder;
+
+                                return totalB - totalA;
+                            });
+                            
+                            // Extract new sorted data arrays
+                            chart.data.labels = usersToSort.map(u => u.username);
+                            chart.data.datasets[0].data = usersToSort.map(u => u.linesLast7Days);
+                            chart.data.datasets[1].data = usersToSort.map(u => u.linesLast30Days);
+                            chart.data.datasets[2].data = usersToSort.map(u => u.linesLast365Days);
+                            chart.data.datasets[3].data = usersToSort.map(u => u.linesLast5Years);
+                            chart.data.datasets[4].data = usersToSort.map(u => u.linesLast10Years);
+                            chart.data.datasets[5].data = usersToSort.map(u => u.linesOlder);
+                            
+                            chart.update();
+                        }
+                    },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
