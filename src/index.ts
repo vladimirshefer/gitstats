@@ -17,28 +17,13 @@ import * as path from 'path';
 import {generateHtmlReport} from './output/report_template';
 import {RawLineStat} from "./base/RawLineStat";
 import {isGitRepo} from "./base/utils";
+import {csvEscape} from './output/csv';
+import {parseArgs, AggregatedData, CliArgs} from './cli/parseArgs';
 
 // --- General Types ---
 let sigintCaught = false;
 
-export interface AggregatedData {
-    [primaryKey: string]: {
-        [secondaryKey: string]: number;
-    };
-}
-
-// --- CLI Argument Types ---
-export interface CliArgs {
-    targetPath: string;
-    additionalRepoPaths: string[];
-    outputFormat: 'csv' | 'html';
-    htmlOutputFile?: string;
-    filenameGlobs?: string[];
-    excludeGlobs?: string[];
-    groupBy: string;
-    thenBy: string;
-    dayBuckets: number[];
-}
+// Types moved to src/cli/parseArgs.ts
 
 // --- Utility Functions ---
 
@@ -62,12 +47,11 @@ function getDirectories(source: string): string[] {
  * This is the main generator function for the pipeline.
  */
 async function* discoverAndExtract(repoPaths: string[], args: CliArgs): AsyncGenerator<RawLineStat> {
-    const originalCwd = process.cwd();
-
     for (const repoPath of repoPaths) {
         if (sigintCaught) break;
         console.error(`\nProcessing repository: ${repoPath || '.'}`);
 
+        const originalCwd = process.cwd();
         const discoveryPath = path.resolve(originalCwd, repoPath);
         if (!fs.existsSync(discoveryPath)) {
             console.error(`Error: Path does not exist: ${discoveryPath}. Skipping.`);
@@ -85,15 +69,13 @@ async function* discoverAndExtract(repoPaths: string[], args: CliArgs): AsyncGen
         }
 
         const repoName = path.basename(repoRoot);
-        process.chdir(repoRoot);
-
-        try {
+        
             // Stage 1: File Discovery
             const finalTargetPath = path.relative(repoRoot, discoveryPath);
             const includePathspecs = (args.filenameGlobs && args.filenameGlobs.length > 0) ? args.filenameGlobs.map(g => `'${g}'`).join(' ') : '';
             const excludePathspecs = (args.excludeGlobs && args.excludeGlobs.length > 0) ? args.excludeGlobs.map(g => `':!${g}'`).join(' ') : '';
             const filesCommand = `git ls-files -- "${finalTargetPath || '.'}" ${includePathspecs} ${excludePathspecs}`;
-            const filesOutput = execSync(filesCommand, { maxBuffer: 1024 * 1024 * 50 }).toString().trim();
+            const filesOutput = execSync(filesCommand, { cwd: repoRoot, maxBuffer: 1024 * 1024 * 50 }).toString().trim();
             const files = filesOutput ? filesOutput.split('\n') : [];
 
             console.error(`Found ${files.length} files to analyze in '${repoName}'...`);
@@ -105,12 +87,14 @@ async function* discoverAndExtract(repoPaths: string[], args: CliArgs): AsyncGen
                 const progressMessage = `[${i + 1}/${files.length}] Analyzing: ${file}`;
                 process.stderr.write(progressMessage.padEnd(process.stderr.columns || 80, ' ') + '\r');
                 
-                if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile() || fs.statSync(file).size === 0) {
-                    continue;
-                }
+                if (!file) continue;
+                const absPath = path.join(repoRoot, file);
+                let stat: fs.Stats | null = null;
+                try { stat = fs.statSync(absPath); } catch { stat = null; }
+                if (!stat || !stat.isFile() || stat.size === 0) continue;
                 
                 try {
-                    yield* extractRawStatsForFile(file, repoName);
+                    yield* extractRawStatsForFile(file, repoName, repoRoot);
                 } catch (e: any) {
                     if (e.signal === 'SIGINT') sigintCaught = true;
                     // Silently skip files that error
@@ -118,15 +102,11 @@ async function* discoverAndExtract(repoPaths: string[], args: CliArgs): AsyncGen
             }
             process.stderr.write(' '.repeat(process.stderr.columns || 80) + '\r');
             console.error(`Analysis complete for '${repoName}'.`);
-
-        } finally {
-            process.chdir(originalCwd);
-        }
     }
 }
 
-function* extractRawStatsForFile(file: string, repoName: string): Generator<RawLineStat> {
-    const blameOutput = execSync(`git blame --line-porcelain -- "${file}"`, { maxBuffer: 1024 * 1024 * 50 }).toString();
+function* extractRawStatsForFile(file: string, repoName: string, repoRoot: string): Generator<RawLineStat> {
+    const blameOutput = execSync(`git blame --line-porcelain -- "${file}"`, { cwd: repoRoot, maxBuffer: 1024 * 1024 * 50 }).toString();
     const blameLines = blameOutput.trim().split('\n');
     const lang = path.extname(file) || 'Other';
     
@@ -183,56 +163,18 @@ async function streamToCsv(statStream: AsyncGenerator<RawLineStat>) {
     console.log('repository_name,file_path,language,username,commit_timestamp');
     for await (const record of statStream) {
         if (sigintCaught) break;
-        console.log(`${record.repoName},"${record.filePath}",${record.lang},${record.user},${record.time}`);
+        console.log([
+            csvEscape(record.repoName),
+            csvEscape(record.filePath),
+            csvEscape(record.lang),
+            csvEscape(record.user),
+            csvEscape(record.time),
+        ].join(','));
     }
 }
 
 // --- Argument Parsing ---
-function parseArgs(): CliArgs {
-    const cliArgs = process.argv.slice(2);
-    const result: Partial<CliArgs> = {
-        filenameGlobs: [],
-        excludeGlobs: [],
-        outputFormat: 'csv',
-        groupBy: 'user',
-        thenBy: 'date',
-        dayBuckets: [7, 30, 180, 365],
-        additionalRepoPaths: [],
-    };
-    
-    for (let i = 0; i < cliArgs.length; i++) {
-        const arg = cliArgs[i];
-        if (arg === '--html') {
-            result.outputFormat = 'html';
-            const nextArg = cliArgs[i + 1];
-            if (nextArg && !nextArg.startsWith('-')) { result.htmlOutputFile = nextArg; i++; }
-        } else if (arg === '--group-by') {
-            const nextArg = cliArgs[i + 1] as string;
-            if (nextArg && ['user', 'repo', 'lang'].includes(nextArg)) { result.groupBy = nextArg; i++; }
-        } else if (arg === '--then-by') {
-            const nextArg = cliArgs[i + 1] as string;
-            if (nextArg && ['repo', 'lang', 'date'].includes(nextArg)) { result.thenBy = nextArg; i++; }
-        } else if (arg.startsWith('--days=')) {
-            const values = arg.split('=')[1];
-            const parsed = values.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d) && d > 0);
-            if (parsed.length > 0) result.dayBuckets = parsed.sort((a, b) => a - b);
-        } else if (arg === '--filename') {
-            const nextArg = cliArgs[i + 1];
-            if (nextArg && !nextArg.startsWith('-')) { result.filenameGlobs!.push(nextArg); i++; }
-        } else if (arg === '--exclude-filename') {
-            const nextArg = cliArgs[i + 1];
-            if (nextArg && !nextArg.startsWith('-')) { result.excludeGlobs!.push(nextArg); i++; }
-        } else if (arg === '--path') {
-            const nextArg = cliArgs[i + 1];
-            if (nextArg && !nextArg.startsWith('-')) { result.additionalRepoPaths!.push(nextArg); i++; }
-        } else if (!arg.startsWith('-')) {
-            if (!result.targetPath) result.targetPath = arg;
-        }
-    }
-
-    result.targetPath = result.targetPath || '.';
-    return result as CliArgs;
-}
+// parseArgs moved to src/cli/parseArgs.ts
 
 // --- Main Application Controller ---
 async function main() {
