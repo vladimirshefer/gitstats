@@ -9,7 +9,7 @@ export function csvEscape(v: string | number): string {
  */
 export async function streamToCsv<T extends Record<string, any>>(
     headers: Array<string>,
-    statStream: AsyncGenerator<T>
+    statStream: AsyncIterable<T>
 ) {
   console.log(headers.map(h => csvEscape(h)).join(','));
   for await (const record of statStream) {

@@ -155,7 +155,7 @@ async function* doProcess1(repoPath: string, config: Config): AsyncGenerator<Raw
 /**
  * Stage 3: Aggregate raw stats from the stream based on grouping dimensions.
  */
-async function aggregateRawStats(statStream: AsyncGenerator<RawLineStat>, config: Config): Promise<AggregatedData> {
+async function aggregateRawStats(statStream: AsyncIterable<RawLineStat>, config: Config): Promise<AggregatedData> {
     const { groupBy, thenBy, dayBuckets } = config;
     const stats: AggregatedData = {};
     const now = Date.now() / 1000;
@@ -185,9 +185,6 @@ async function aggregateRawStats(statStream: AsyncGenerator<RawLineStat>, config
     return stats;
 }
 
-// --- Argument Parsing ---
-// parseArgs moved to src/cli/parseArgs.ts
-
 // --- Main Application Controller ---
 async function main() {
     const tmpVfs: VirtualFileSystem = new InMemoryFileSystemImpl();
@@ -209,15 +206,31 @@ async function main() {
         throw new Error("No git repositories found to analyze.");
     }
 
-    console.log(`Found ${repoPathsToProcess.length} repositories to analyze:`);
+    console.error(`Found ${repoPathsToProcess.length} repositories to analyze:`);
     repoPathsToProcess.forEach(p => console.error(`- ${p || '.'}`));
 
     // --- Pipeline Execution ---
-    const statStream =
+    const statStream: AsyncIterable<RawLineStat> =
         AsyncGeneratorUtil.flatMap(
             repoPathsToProcess,
             repoPath => doProcess1(repoPath, config)
         );
+
+    let prepared = AsyncGeneratorUtil.map(statStream, it => {
+        return {user: it.user, time: it.time} as Record<string, any>
+    });
+    let counted = AsyncGeneratorUtil.distinctCount(prepared);
+    let aggregated =
+        AsyncGeneratorUtil.map(
+            counted, ([it, count]) => {
+                it.count = count;
+                return it;
+            }
+        )
+
+    for await (const obj of aggregated) {
+        console.log(JSON.stringify(obj));
+    }
 
     if (config.outputFormat === 'html') {
         const aggregatedData = await aggregateRawStats(statStream, config); // Stage 3
