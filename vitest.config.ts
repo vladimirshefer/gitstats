@@ -5,4 +5,5 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     globals: true,
   },
+  assetsInclude: ['**/*.html']
 });

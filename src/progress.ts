@@ -8,4 +8,8 @@ class Progress {
     setProgress(progress: number) {
         this.progress = progress;
     }
+
+    getProgress() {
+        return this.progress;
+    }
 }

@@ -20,6 +20,7 @@ import {Config, loadConfig} from './input/config';
 import {git_blame_porcelain, isGitRepo} from "./git";
 import {InMemoryFileSystemImpl, VirtualFileSystem} from "./vfs";
 import {AsyncGeneratorUtil, AsyncIteratorWrapperImpl} from "./util/AsyncGeneratorUtil";
+import {clusterFiles} from "./util/file_tree_clustering";
 
 let sigintCaught = false;
 
@@ -67,6 +68,8 @@ async function* forEachRepoFile(
     const filesCommand = `git ls-files -- "${finalTargetPath || '.'}"`;
     const filesOutput = execSync(filesCommand, {cwd: repoRoot, maxBuffer: 1024 * 1024 * 50}).toString().trim();
     const files = filesOutput ? filesOutput.split('\n') : [];
+    const filesClustered = clusterFiles(files, 1000, 50);
+    console.log(filesClustered.map(it => `${it.path}${it.isLeftovers ? "/*" : ""} (${it.weight})`));
 
     console.error(`Found ${files.length} files to analyze in '${repoName}'...`);
 
@@ -171,17 +174,17 @@ async function main() {
 
     const statStream: AsyncGenerator<DataRow> = new AsyncIteratorWrapperImpl(AsyncGeneratorUtil.of(repoPathsToProcess))
         .flatMap(repoPath => forEachRepoFile(repoPath, doProcessFile1))
-        .map(it => [it[0], it[1]])
+        .map(it => [it[1], it[0]])
         .get();
 
     const aggregatedData = await aggregateRawStats(statStream);
 
-    if (sigintCaught) console.error("\nAnalysis was interrupted. Report may be incomplete.");
+    if (sigintCaught) console.error("Analysis was interrupted. Report may be incomplete.");
 
     if (config.outputFormat === 'html') {
         const htmlFile = config.htmlOutputFile || 'git-stats.html';
         generateHtmlReport(aggregatedData, htmlFile, originalCwd, config as unknown as CliArgs);
-        console.log(`\nHTML report generated: ${path.resolve(originalCwd, htmlFile)}`);
+        console.log(`HTML report generated: ${path.resolve(originalCwd, htmlFile)}`);
     } else {
         console.log(JSON.stringify(aggregatedData, null, 2))
     }
