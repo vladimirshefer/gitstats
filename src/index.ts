@@ -15,12 +15,11 @@ import {execSync} from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {generateHtmlReport} from './output/report_template';
-import {streamToCsv} from './output/csv';
 import {AggregatedData, CliArgs, parseArgs} from './cli/parseArgs';
 import {Config, loadConfig} from './input/config';
 import {git_blame_porcelain, isGitRepo} from "./git";
 import {InMemoryFileSystemImpl, VirtualFileSystem} from "./vfs";
-import {AsyncGeneratorUtil} from "./util/AsyncGeneratorUtil";
+import {AsyncGeneratorUtil, AsyncIteratorWrapperImpl} from "./util/AsyncGeneratorUtil";
 
 let sigintCaught = false;
 
@@ -39,7 +38,7 @@ function getDirectories(source: string): string[] {
 
 export type DataRow = any[];
 
-async function* doProcess1(
+async function* forEachRepoFile(
     repoPath: string,
     doProcessFile: (repoRoot: string, fileName: string) => DataRow[]
 ): AsyncGenerator<DataRow> {
@@ -78,7 +77,7 @@ async function* doProcess1(
         process.stderr.write(progressMessage.padEnd(process.stderr.columns || 80, ' ') + '\r');
 
         try {
-            yield* doProcessFile(file, repoRoot);
+            yield* doProcessFile(repoRoot, file);
         } catch (e: any) {
             if (e.signal === 'SIGINT') sigintCaught = true;
             // Silently skip files that error
@@ -102,7 +101,7 @@ function bucket(n: number, buckets: number[]): number {
     return -1;
 }
 
-function doProcessFile1(filePath: string, repoRoot: string): DataRow[] {
+function doProcessFile1(repoRoot: string, filePath: string): DataRow[] {
     if (!filePath) return [];
     const absPath = path.join(repoRoot, filePath);
     let stat: fs.Stats | null = null;
@@ -170,34 +169,21 @@ async function main() {
 
     let repoPathsToProcess = getRepoPathsToProcess(config);
 
-    // --- Pipeline Execution ---
-    const statStream: AsyncIterable<DataRow> =
-        AsyncGeneratorUtil.flatMap(
-            repoPathsToProcess,
-            repoPath => doProcess1(repoPath, doProcessFile1)
-        );
+    const statStream: AsyncGenerator<DataRow> = new AsyncIteratorWrapperImpl(AsyncGeneratorUtil.of(repoPathsToProcess))
+        .flatMap(repoPath => forEachRepoFile(repoPath, doProcessFile1))
+        .map(it => [it[0], it[1]])
+        .get();
 
-    let prepared: AsyncGenerator<DataRow> = AsyncGeneratorUtil.map(statStream, it => {
-        return [it[0], it[1]]
-    });
-    let counted = AsyncGeneratorUtil.distinctCount(prepared);
-    for await (const obj of counted) {
-        console.log(JSON.stringify(obj));
-    }
+    const aggregatedData = await aggregateRawStats(statStream);
+
+    if (sigintCaught) console.error("\nAnalysis was interrupted. Report may be incomplete.");
 
     if (config.outputFormat === 'html') {
-        const aggregatedData = await aggregateRawStats(statStream);
-        if (sigintCaught) console.error("\nAnalysis was interrupted. HTML report may be incomplete.");
-
         const htmlFile = config.htmlOutputFile || 'git-stats.html';
         generateHtmlReport(aggregatedData, htmlFile, originalCwd, config as unknown as CliArgs);
         console.log(`\nHTML report generated: ${path.resolve(originalCwd, htmlFile)}`);
     } else {
-        await streamToCsv(
-            ["repoName", "filePath", "lang", "user", "time"],
-            statStream
-        );
-        if (sigintCaught) console.error("\nAnalysis was interrupted. CSV output may be incomplete.");
+        console.log(JSON.stringify(aggregatedData, null, 2))
     }
 }
 
