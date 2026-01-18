@@ -61,7 +61,6 @@ export function clusterFiles(
                     ];
                 }
                 if (newClusterFiles.length < clusterMinSize || remainingFiles.length < clusterMinSize) {
-                    console.error(`F: ${originalCluster.path.join("/")}: ${mf} (${newClusterFiles.length}/${remainingFiles.length}) too small cluster, skipping... (min size: ${clusterMinSize})`)
                     return [{...originalCluster, isUnclusterable: true} as Cluster];
                 }
                 return [
