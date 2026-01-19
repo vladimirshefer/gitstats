@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import {CliArgs, DataRow} from '../index';
+import {CliArgs, DataRow, Primitive} from '../index';
 import htmlTemplate from './report_template.html';
 
 /**
@@ -10,26 +10,17 @@ export function generateHtmlReport(data: DataRow[], outputFile: string, original
     const topN = 20; // Show top N items in charts
 
     // 1. Get all primary and secondary keys from the aggregated data
-    const primaryKeys = [...new Set(data.map(it => it[groupBy]))];
-    const allSecondaryKeys = [...new Set(data.map(it => it[thenBy]))];
+    const primaryKeys: Primitive[] = [...new Set(data.map(it => it[groupBy]))];
+    const allSecondaryKeys: Primitive[] = [...new Set(data.map(it => it[thenBy]))];
 
     // 2. Sort primary keys by total contribution (sum of all their secondary buckets)
-    const sortedPrimaryKeys = primaryKeys.sort((a, b) => {
+    const sortedPrimaryKeys: Primitive[] = primaryKeys.sort((a, b) => {
         const totalA = Object.values(data[a]).reduce((sum, count) => sum + count, 0);
         const totalB = Object.values(data[b]).reduce((sum, count) => sum + count, 0);
         return totalB - totalA;
     });
 
-    // 3. Sort secondary keys (if they are date buckets, use chronological order)
-    if (thenBy === 'date') {
-        allSecondaryKeys.sort((a, b) => {
-            if (a === 'Older') return 1;
-            if (b === 'Older') return -1;
-            return parseInt(a.match(/\d+/)?.[0] || '0') - parseInt(b.match(/\d+/)?.[0] || '0');
-        });
-    } else {
-        allSecondaryKeys.sort();
-    }
+    allSecondaryKeys.sort();
 
     // 4. Prepare data for charts (Top N) and table (all)
     const chartPrimaryKeys = sortedPrimaryKeys.slice(0, topN);
@@ -48,7 +39,7 @@ export function generateHtmlReport(data: DataRow[], outputFile: string, original
     }));
 
     // 6. Dynamically create table headers and rows
-    const primaryHeader = groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
+    const primaryHeader = "Primary header placeholder";
     const tableHeaders = `<th>${primaryHeader}</th><th class="num">Total</th>` + allSecondaryKeys.map(secKey => `<th class="num">${secKey}</th>`).join('');
 
     const tableRows = sortedPrimaryKeys.map(pk => {
