@@ -1,7 +1,7 @@
-import {execSync} from "child_process";
 import path from "path";
 import {DataRow} from "./index";
 import fs from "fs";
+import {execAsync} from "./util/exec";
 
 /**
  * Executes git blame --line-porcelain for a file and returns the raw output as a string.
@@ -12,16 +12,25 @@ import fs from "fs";
  * @param since
  * @returns plain string output from git blame --line-porcelain
  */
-function executeGitBlamePorcelain(
+export async function executeGitBlamePorcelain(
     file: string,
     repoRoot: string,
-    revisionBoundary: string | undefined = undefined,
-    since: string | undefined = undefined
-): string {
-    return execSync(`git blame --line-porcelain ${!!since ? `--since=${since}` : ""} ${revisionBoundary || ""} -- "${file}"`, {
-        cwd: repoRoot,
-        maxBuffer: 1024 * 1024 * 50
-    }).toString();
+    revisionBoundary?: string,
+    since?: string
+): Promise<string> {
+    const args = ["blame", "--line-porcelain"];
+
+    if (since) {
+        args.push(`--since=${since}`);
+    }
+    if (revisionBoundary) {
+        args.push(revisionBoundary);
+    }
+
+    args.push("--", file);
+
+    const { stdout } = await execAsync("git", args, { cwd: repoRoot });
+    return stdout;
 }
 
 /**
@@ -77,8 +86,8 @@ function executeGitBlamePorcelain(
  * @param repoRoot - absolute path to the repository root
  * @param fields
  */
-export function git_blame_porcelain(file: string, repoRoot: string, fields: string[]): DataRow[] {
-    const blameOutput = executeGitBlamePorcelain(file, repoRoot);
+export async function git_blame_porcelain(file: string, repoRoot: string, fields: string[]): Promise<DataRow[]> {
+    const blameOutput = await executeGitBlamePorcelain(file, repoRoot);
     return parsePorcelain(blameOutput, fields);
 }
 
