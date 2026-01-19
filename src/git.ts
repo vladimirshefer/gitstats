@@ -17,7 +17,7 @@ export async function executeGitBlamePorcelain(
     repoRoot: string,
     revisionBoundary?: string,
     since?: string
-): Promise<string> {
+): Promise<string[]> {
     const args = ["blame", "--line-porcelain"];
 
     if (since) {
@@ -91,9 +91,7 @@ export async function git_blame_porcelain(file: string, repoRoot: string, fields
     return parsePorcelain(blameOutput, fields);
 }
 
-export function parsePorcelain(blameOutput: string, fields: string[]): DataRow[] {
-    const blameLines = blameOutput.trim().split('\n');
-
+export function parsePorcelain(blameOutput: string[], fields: string[]): DataRow[] {
     const userPos = fields.indexOf("author");
     const commiterTimePos = fields.indexOf("committer-time");
     const boundaryPos = fields.indexOf("boundary");
@@ -106,7 +104,7 @@ export function parsePorcelain(blameOutput: string, fields: string[]): DataRow[]
     }
     let nextRow: DataRow = [...emptyRow]
     const result: DataRow[] = [];
-    for (const line of blameLines) {
+    for (const line of blameOutput) {
         if (line.startsWith('\t')) {
             result.push(nextRow);
             nextRow = [...emptyRow]

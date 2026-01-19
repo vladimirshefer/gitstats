@@ -29,7 +29,7 @@ summary Update farewell line
 filename example.txt
 \tGoodbye world
         `.trim()
-        let parsePorcelain1 = parsePorcelain(output, ["author", "committer-time"]);
+        let parsePorcelain1 = parsePorcelain(output.split("\n"), ["author", "committer-time"]);
         expect(parsePorcelain1).toStrictEqual([
             ["Alice Doe", 1700000000],
             ["Bob Smith", 1700100000]

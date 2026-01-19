@@ -11,19 +11,19 @@ export function execAsync(
     command: string,
     args: string[] = [],
     options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}
-): Promise<{ stdout: string; stderr: string }> {
+): Promise<{ stdout: string[]; stderr: string[] }> {
     return new Promise((resolve, reject) => {
         const child = spawn(command, args, {...options, shell: true});
 
-        let stdout = "";
-        let stderr = "";
+        let stdout: string[] = [];
+        let stderr: string[] = [];
 
         child.stdout.on("data", (data) => {
-            stdout += data.toString();
+            stdout.push(data.toString());
         });
 
         child.stderr.on("data", (data) => {
-            stderr += data.toString();
+            stderr.push(data.toString());
         });
 
         child.on("error", (err) => {
@@ -32,7 +32,7 @@ export function execAsync(
 
         child.on("close", (code) => {
             if (code === 0) {
-                resolve({stdout: stdout.trim(), stderr: stderr.trim()});
+                resolve({stdout: stdout, stderr: stderr});
             } else {
                 reject(new Error(`Command failed with code ${code}\n${stderr}`));
             }
