@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 
 export interface VirtualFileSystem {
     read(path: string): Promise<string>;
@@ -7,24 +8,30 @@ export interface VirtualFileSystem {
 }
 
 export class RealFileSystemImpl implements VirtualFileSystem {
-    path: String
+    basePath: String
 
-    constructor(path: string) {
-        this.path = path;
+    constructor(basePath: string) {
+        this.basePath = path.normalize(basePath);
     }
 
-    async read(path: string): Promise<string> {
-        return fs.readFileSync(path, 'utf8');
+    async read(filePath: string): Promise<string> {
+        return fs.readFileSync(this.resolve(filePath), 'utf8');
     }
 
-    async write(path: string, content: string): Promise<void> {
-        fs.writeFileSync(path, content);
+    async write(filePath: string, content: string): Promise<void> {
+        let path1 = path.resolve(this.resolve(filePath), "..");
+        console.log(`creating directory ${path1}`)
+        fs.mkdirSync(path1, {recursive: true})
+        fs.writeFileSync(this.resolve(filePath), content);
     }
 
-    async append(path: string, content: string): Promise<void> {
-        fs.appendFileSync(path, content);
+    async append(filePath: string, content: string): Promise<void> {
+        fs.appendFileSync(this.resolve(filePath), content);
     }
 
+    private resolve(filePath: string) {
+        return path.normalize(`${this.basePath}/${filePath}`);
+    }
 }
 
 export class InMemoryFileSystemImpl implements VirtualFileSystem{
