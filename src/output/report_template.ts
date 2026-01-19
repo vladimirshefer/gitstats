@@ -1,18 +1,17 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { AggregatedData, CliArgs } from '../index';
+import {CliArgs, DataRow} from '../index';
 import htmlTemplate from './report_template.html';
 
 /**
  * Generates a self-contained, dynamic HTML report file with charts.
  */
-export function generateHtmlReport(data: AggregatedData, outputFile: string, originalCwd: string, args: CliArgs) {
+export function generateHtmlReport(data: DataRow[], outputFile: string, originalCwd: string, groupBy: number, thenBy: number) {
     const topN = 20; // Show top N items in charts
-    const { groupBy, thenBy } = args;
 
     // 1. Get all primary and secondary keys from the aggregated data
-    const primaryKeys = Object.keys(data);
-    const allSecondaryKeys = [...new Set(primaryKeys.flatMap(pk => Object.keys(data[pk])))];
+    const primaryKeys = [...new Set(data.map(it => it[groupBy]))];
+    const allSecondaryKeys = [...new Set(data.map(it => it[thenBy]))];
 
     // 2. Sort primary keys by total contribution (sum of all their secondary buckets)
     const sortedPrimaryKeys = primaryKeys.sort((a, b) => {
