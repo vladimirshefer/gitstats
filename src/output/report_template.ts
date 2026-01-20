@@ -6,9 +6,9 @@ import {DataRow, Primitive} from "../base/types";
 /**
  * Generates a self-contained, dynamic HTML report file with charts.
  */
-export function generateHtmlReport(data: DataRow[], outputFile: string, originalCwd: string, groupBy: number, thenBy: number) {
+export function generateHtmlReport(data: DataRow[], outputFile: string, originalCwd: string) {
     const topN = 20; // Show top N items in charts
-
+    let groupBy: number = 0, thenBy: number = 1
     // 1. Get all primary and secondary keys from the aggregated data
     const primaryKeys: Primitive[] = [...new Set(data.map(it => it[groupBy]))];
     const allSecondaryKeys: Primitive[] = [...new Set(data.map(it => it[thenBy]))];

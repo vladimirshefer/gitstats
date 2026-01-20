@@ -10,14 +10,11 @@
  * 3.  **Aggregation:** Consumes the stream to group stats based on configurable dimensions.
  * 4.  **Output Formatting:** Renders the aggregated data as an HTML report or a CSV file.
  */
-
 import {execSync} from 'child_process';
 import {execAsync} from './util/exec';
 import * as fs from 'fs';
 import * as path from 'path';
 import {generateHtmlReport} from './output/report_template';
-import {CliArgs, parseArgs} from './cli/parseArgs';
-import {Config, loadConfig} from './input/config';
 import {git_blame_porcelain, isGitRepo} from "./git";
 import {RealFileSystemImpl, VirtualFileSystem} from "./vfs";
 import {AsyncGeneratorUtil, AsyncIteratorWrapperImpl} from "./util/AsyncGeneratorUtil";
@@ -164,8 +161,8 @@ export async function* distinctCount(
     }
 }
 
-function getRepoPathsToProcess(config: Config): string[] {
-    let repoPathsToProcess: string[] = [...config.additionalRepoPaths, config.targetPath]
+function getRepoPathsToProcess(): string[] {
+    let repoPathsToProcess: string[] = ["."]
         .flatMap(it => findRepositories(it, 3));
     repoPathsToProcess = [...new Set(repoPathsToProcess)].sort();
     if (repoPathsToProcess.length === 0) {
@@ -190,11 +187,9 @@ async function main() {
         console.error("\nSignal received. Finishing current file then stopping. Press Ctrl+C again to exit immediately.");
     });
 
-    const args = parseArgs();
-    const config: Config = loadConfig(args);
     const originalCwd = process.cwd();
 
-    let repoPathsToProcess = getRepoPathsToProcess(config);
+    let repoPathsToProcess = getRepoPathsToProcess();
 
     await tmpVfs.write("data.jsonl", "");
 
@@ -206,9 +201,11 @@ async function main() {
     let aggregatedData1 = distinctCount(dataSet);
     let aggregatedData = await AsyncGeneratorUtil.collect(aggregatedData1);
 
-    if (config.outputFormat === 'html') {
-        const htmlFile = config.htmlOutputFile || 'git-stats.html';
-        generateHtmlReport(aggregatedData, htmlFile, originalCwd, config as unknown as CliArgs);
+    let useHtml = false;
+
+    if (useHtml) {
+        const htmlFile = './.git-stats/report.html';
+        generateHtmlReport(aggregatedData, htmlFile, originalCwd);
         console.error(`HTML report generated: ${path.resolve(originalCwd, htmlFile)}`);
     } else {
         aggregatedData
