@@ -100,6 +100,7 @@ export function parsePorcelain(blameOutput: string[], fields: string[]): DataRow
     const userPos = fields.indexOf("author");
     const commiterTimePos = fields.indexOf("committer-time");
     const boundaryPos = fields.indexOf("boundary");
+    const commitPos = fields.indexOf("commit");
     let emptyRow: DataRow = [...fields];
     if (commiterTimePos >= 0) {
         emptyRow[commiterTimePos] = 0
@@ -107,13 +108,29 @@ export function parsePorcelain(blameOutput: string[], fields: string[]): DataRow
     if (boundaryPos >= 0) {
         emptyRow[boundaryPos] = 0
     }
+    // Working row that carries current hunk's metadata (author, commit, etc.)
     let nextRow: DataRow = [...emptyRow]
     const result: DataRow[] = [];
     for (const line of blameOutput) {
         if (line.startsWith('\t')) {
-            result.push(nextRow);
-            nextRow = [...emptyRow]
+            // Push a snapshot of the current state (do not reset; same hunk may span multiple lines)
+            result.push([...nextRow]);
             continue;
+        }
+        // Hunk header starts with commit hash, e.g.:
+        // <commit> <orig_lineno> <lineno> <num_lines>
+        if (commitPos >= 0) {
+            const firstSpace = line.indexOf(' ');
+            if (firstSpace === 40) {
+                const possibleHash = line.substring(0, firstSpace);
+                // Accept 40-hex (optionally prefixed with ^ for boundary/root markers)
+                if (/^\^?[0-9a-f]{40}$/i.test(possibleHash)) {
+                    // Start a new hunk context
+                    nextRow = [...emptyRow]
+                    nextRow[commitPos] = possibleHash.replace(/^\^/, '');
+                    continue;
+                }
+            }
         }
         if (userPos >= 0 && line.startsWith('author ')) {
             nextRow[userPos] = line.substring('author '.length).replace(/^<|>$/g, '');

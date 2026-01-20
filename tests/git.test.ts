@@ -4,7 +4,7 @@ import {parsePorcelain} from "../src/git";
 describe('test git blame porcelain', () => {
     it('base scenario', () => {
         const output = `
-a1b2c3d4e5f6g7h8i9j0a1b2c3d4e5f6g7h8 1 1 1
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 1 1
 author Alice Doe
 author-mail <alice@example.com>
 author-time 1700000000
@@ -16,7 +16,7 @@ committer-tz +0000
 summary Initial commit
 filename example.txt
 \tHello world
-f9e8d7c6b5a4a3b2c1d0f9e8d7c6b5a4a3b2c1d0 2 2 1
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 2 2 1
 author Bob Smith
 author-mail <bob@example.com>
 author-time 1700100000
@@ -34,5 +34,28 @@ filename example.txt
             ["Alice Doe", 1700000000],
             ["Bob Smith", 1700100000]
         ])
+    });
+
+    it('captures commit hash when requested', () => {
+        const output = `
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 1 2
+author Alice Doe
+committer-time 1700000000
+filename example.txt
+\tLine one
+\tLine two
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 3 3 1
+author Bob Smith
+committer-time 1700100000
+filename example.txt
+\tLine three
+        `.trim();
+
+        const rows = parsePorcelain(output.split('\n'), ["commit", "author", "committer-time"]);
+        expect(rows).toStrictEqual([
+            ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Alice Doe", 1700000000],
+            ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Alice Doe", 1700000000],
+            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "Bob Smith", 1700100000],
+        ]);
     });
 });
