@@ -39,8 +39,6 @@
         </table>
     </div>
     <script>
-        const chartData = __CHART_DATA_JSON__;
-        const userMap = new Map(chartData.map(u => [u.username, u]));
         const labels = __CHART_LABELS_JSON__;
         const datasets = __CHART_DATASETS_JSON__;
 
@@ -61,36 +59,6 @@
                     } 
                 },
                 plugins: {
-                    legend: {
-                        onClick: (e, legendItem, legend) => {
-                            Chart.defaults.plugins.legend.onClick(e, legendItem, legend);
-
-                            const chart = legend.chart;
-                            const visibilities = chart.data.datasets.map((_, i) => chart.isDatasetVisible(i));
-                            const usersToSort = chart.data.labels.map(label => userMap.get(label));
-
-                            usersToSort.sort((a, b) => {
-                                let totalA = 0;
-                                let totalB = 0;
-                                
-                                for (let i = 0; i < visibilities.length; i++) {
-                                    if (visibilities[i]) {
-                                        totalA += a.bucketValues[i] || 0;
-                                        totalB += b.bucketValues[i] || 0;
-                                    }
-                                }
-
-                                return totalB - totalA;
-                            });
-                            
-                            chart.data.labels = usersToSort.map(u => u.username);
-                            chart.data.datasets.forEach((dataset, i) => {
-                                dataset.data = usersToSort.map(u => u.bucketValues[i]);
-                            });
-                            
-                            chart.update();
-                        }
-                    },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
