@@ -154,7 +154,6 @@ export function isGitRepo(dir: string): boolean {
 
 export async function findRevision(repoRoot: string, commitsBack: number): Promise<string | undefined> {
     let n = commitsBack;
-    let revisionBoundary: string | undefined = undefined;
     try {
         const {stdout} = await execAsync("git", [
             "rev-list",
@@ -162,15 +161,12 @@ export async function findRevision(repoRoot: string, commitsBack: number): Promi
             "--skip=" + n,
             "HEAD"
         ], {cwd: repoRoot});
-        const boundaryCommit = stdout.join("\n");
-        if (boundaryCommit) {
-            revisionBoundary = `${boundaryCommit}..HEAD`;
-        }
+        return stdout.join("\n").trim();
     } catch (e: any) {
         // If we fail to determine the boundary (e.g., fewer than N commits), proceed without it
         if (e && (e.stack || e.message)) {
             console.error(`Failed to compute ${n}-commit boundary for repo ${repoRoot}:`, e.message || e.stack);
         }
     }
-    return revisionBoundary;
+    return undefined;
 }
