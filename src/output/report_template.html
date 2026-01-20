@@ -34,7 +34,7 @@
             <div style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:12px;" id="filters"></div>
         </div>
         <div class="chart-container" style="margin-top: 20px;">
-            <h2 id="chartTitle">__CHART_TITLE__</h2>
+            <h2 id="chartTitle">Contributions</h2>
             <canvas id="mainChart"></canvas>
         </div>
         <h2 id="tableTitle">All Stats</h2>
@@ -42,26 +42,27 @@
             <thead>
                 <tr>
                     <th id="primaryHeader">Author</th>
-                    __TABLE_HEADERS__
+                    <th class="num">Total</th>
                 </tr>
             </thead>
             <tbody>
-                __TABLE_ROWS__
+                
             </tbody>
         </table>
     </div>
     <script>
-        const RAW_DATASET = __DATASET_JSON__;
-        const HEADER_LABELS = __HEADER_LABELS_JSON__;
-        const labels = __CHART_LABELS_JSON__;
-        const datasets = __CHART_DATASETS_JSON__;
+        const RAW_DATASET =
+            __DATASET_JSON__
+            || [];
+        // Fixed schema as per pipeline: [author, days_bucket, lang, clusterPath, repoName, count]
+        const HEADER_LABELS = ["author","days_bucket","lang","clusterPath","repoName","count"];
 
         const ctx = document.getElementById('mainChart').getContext('2d');
         let mainChart = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: labels,
-                datasets: datasets
+                labels: [],
+                datasets: []
             },
             options: { 
                 indexAxis: 'y', 
