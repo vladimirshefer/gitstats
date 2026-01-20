@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Git Blame Statistics</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- React 18 UMD builds -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel Standalone for in-browser JSX transform -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f8f9fa; color: #212529; }
         .container { max-width: 900px; margin: 20px auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.05); }
@@ -13,67 +18,13 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Git Contribution Statistics</h1>
-        <div class="controls">
-            <h2>Controls</h2>
-            <div style="display:flex; gap:16px; flex-wrap: wrap; align-items: center;">
-                <label>Primary group:
-                    <select id="primarySelect"></select>
-                </label>
-                <label>Secondary group:
-                    <select id="secondarySelect"></select>
-                </label>
-            </div>
-            <div style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:12px;" id="filters"></div>
-        </div>
-        <div class="chart-container" style="margin-top: 20px;">
-            <h2 id="chartTitle">Contributions</h2>
-            <canvas id="mainChart"></canvas>
-        </div>
-    </div>
-    <script>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react">
         const RAW_DATASET =
             __DATASET_JSON__
             || [];
         // Fixed schema as per pipeline: [author, days_bucket, lang, clusterPath, repoName, count]
         const HEADER_LABELS = ["author","days_bucket","lang","clusterPath","repoName","count"];
-
-        const ctx = document.getElementById('mainChart').getContext('2d');
-        let mainChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: [],
-                datasets: []
-            },
-            options: { 
-                indexAxis: 'y', 
-                scales: { 
-                    x: { stacked: true, beginAtZero: true },
-                    y: { 
-                        stacked: true,
-                        ticks: { autoSkip: false }
-                    } 
-                },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.x !== null) {
-                                    label += context.parsed.x.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
         // -------- Client-side grouping/filtering engine --------
         const KEY_INDEX = Object.fromEntries(HEADER_LABELS.map((k,i)=>[k,i]));
         const COUNT_IDX_FROM_END = 1; // last element is count
@@ -94,71 +45,20 @@
           return Array.from(set);
         }
 
-        // Build filters UI
-        const filtersDiv = document.getElementById('filters');
-        const filterState = {};
-        for (const key of allKeys) {
-          const idx = KEY_INDEX[key];
-          const values = uniqueValues(RAW_DATASET, idx).sort((a,b)=>{
-            if (key==='days_bucket') return Number(a)-Number(b);
-            return String(a).localeCompare(String(b));
-          });
-          filterState[key] = new Set(values); // all selected by default
-          const container = document.createElement('div');
-          container.innerHTML = `
-            <label style="display:block; font-weight:600; margin-bottom:6px;">${NICE_LABEL[key]||key}
-              <span style="color:#6c757d; font-weight:400;">(<span data-role="sel">${values.length}</span>/<span data-role="tot">${values.length}</span>)</span>
-            </label>
-          `;
-          const select = document.createElement('select');
-          select.multiple = true;
-          select.size = Math.min(8, Math.max(3, values.length));
-          select.style.width = '100%';
-          for (const v of values) {
-            const opt = document.createElement('option');
-            opt.value = String(v);
-            opt.textContent = String(v);
-            opt.selected = true;
-            select.appendChild(opt);
-          }
-          select.addEventListener('change', ()=>{
-            const chosen = Array.from(select.selectedOptions).map(o=>o.value);
-            filterState[key] = new Set(chosen);
-            container.querySelector('[data-role="sel"]').textContent = String(chosen.length);
-            recompute();
-          });
-          container.appendChild(select);
-          filtersDiv.appendChild(container);
-        }
-
-        // Grouping selectors
-        const primarySel = document.getElementById('primarySelect');
-        const secondarySel = document.getElementById('secondarySelect');
-        for (const key of allKeys) {
-          const opt1 = document.createElement('option'); opt1.value = key; opt1.textContent = NICE_LABEL[key]||key; primarySel.appendChild(opt1);
-          const opt2 = document.createElement('option'); opt2.value = key; opt2.textContent = NICE_LABEL[key]||key; secondarySel.appendChild(opt2);
-        }
-        primarySel.value = 'author';
-        secondarySel.value = 'days_bucket';
-        primarySel.addEventListener('change', recompute);
-        secondarySel.addEventListener('change', recompute);
-
-        function passesFilters(row){
-          for (const key of allKeys) {
-            const idx = KEY_INDEX[key];
-            if (!filterState[key].has(String(row[idx]))) return false;
-          }
-          return true;
-        }
-
-        function pivot(dataset, primaryKey, secondaryKey){
+        function pivot(dataset, primaryKey, secondaryKey, filterState){
           const pIdx = KEY_INDEX[primaryKey];
           const sIdx = KEY_INDEX[secondaryKey];
           const pivot = new Map();
           const totals = new Map();
           const secValuesSet = new Set();
           for (const row of dataset) {
-            if (!passesFilters(row)) continue;
+            let ok = true;
+            for (const key of allKeys) {
+              const idx = KEY_INDEX[key];
+              const sel = filterState[key];
+              if (sel && !sel.has(String(row[idx]))) { ok = false; break; }
+            }
+            if (!ok) continue;
             const pk = row[pIdx];
             const sk = row[sIdx];
             const count = Number(row[row.length - COUNT_IDX_FROM_END]) || 0;
@@ -176,35 +76,164 @@
           return {pivot, totals, primaryKeys, secondaryKeys};
         }
 
-        function render(){
-          const primaryKey = primarySel.value;
-          const secondaryKey = secondarySel.value;
-          // compute pivot
-          const {pivot: pv, totals, primaryKeys, secondaryKeys} = pivot(RAW_DATASET, primaryKey, secondaryKey);
-          const topN = 20;
-          const chartPrimaryKeys = primaryKeys.slice(0, topN);
-          const bucketColors = ['rgba(214, 40, 40, 0.7)','rgba(247, 127, 0, 0.7)','rgba(252, 191, 73, 0.7)','rgba(168, 218, 142, 0.7)','rgba(75, 192, 192, 0.7)','rgba(54, 162, 235, 0.7)','rgba(153, 102, 255, 0.7)','rgba(201, 203, 207, 0.7)'];
-          const ds = secondaryKeys.map((sk,i)=>({
-            label: String(sk),
-            data: chartPrimaryKeys.map(pk => (pv.get(pk)?.get(sk)) || 0),
-            backgroundColor: bucketColors[i % bucketColors.length]
-          }));
+        // ---------- React Components ----------
+        function ChartView({ labels, datasets }){
+          const canvasRef = React.useRef(null);
+          const chartRef = React.useRef(null);
+          React.useEffect(()=>{
+            const ctx = canvasRef.current.getContext('2d');
+            chartRef.current = new Chart(ctx, {
+              type: 'bar',
+              data: { labels: [], datasets: [] },
+              options: {
+                indexAxis: 'y',
+                scales: {
+                  x: { stacked: true, beginAtZero: true },
+                  y: { stacked: true, ticks: { autoSkip: false } }
+                },
+                plugins: {
+                  tooltip: {
+                    callbacks: {
+                      label: function(context) {
+                        let label = context.dataset.label || '';
+                        if (label) label += ': ';
+                        if (context.parsed.x !== null) label += context.parsed.x.toLocaleString();
+                        return label;
+                      }
+                    }
+                  }
+                }
+              }
+            });
+            return ()=>{ chartRef.current && chartRef.current.destroy(); };
+          }, []);
 
-          // update chart
-          mainChart.data.labels = chartPrimaryKeys;
-          mainChart.data.datasets = ds;
-          mainChart.update();
+          React.useEffect(()=>{
+            if (!chartRef.current) return;
+            chartRef.current.data.labels = labels;
+            chartRef.current.data.datasets = datasets;
+            chartRef.current.update();
+          }, [labels, datasets]);
 
-          // update titles
-          document.getElementById('chartTitle').textContent = `Contributions by ${NICE_LABEL[primaryKey]||primaryKey} (Top 20), grouped by ${NICE_LABEL[secondaryKey]||secondaryKey}`;
+          return <canvas ref={canvasRef} />;
         }
 
-        function recompute(){
-          render();
+        function MultiSelect({ label, values, selectedSet, onChange }){
+          const selCount = selectedSet.size;
+          const total = values.length;
+          return (
+            <div>
+              <label style={{ display:'block', fontWeight:600, marginBottom:'6px' }}>
+                {label}{' '}
+                <span style={{ color:'#6c757d', fontWeight:400 }}>({selCount}/{total})</span>
+              </label>
+              <select
+                multiple
+                size={Math.min(8, Math.max(3, values.length))}
+                style={{ width: '100%' }}
+                onChange={(e)=>{
+                  const chosen = Array.from(e.target.selectedOptions).map(o=>o.value);
+                  onChange(new Set(chosen));
+                }}
+              >
+                {values.map(v=> (
+                  <option key={String(v)} value={String(v)} selected={selectedSet.has(String(v))}>
+                    {String(v)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
         }
 
-        // initial render with defaults
-        render();
+        function App(){
+          const allKeysLocal = allKeys;
+          // initialize filters with all selected
+          const initialFilters = React.useMemo(()=>{
+            const f = {};
+            for (const key of allKeysLocal) {
+              const idx = KEY_INDEX[key];
+              const values = uniqueValues(RAW_DATASET, idx);
+              f[key] = new Set(values.map(v=>String(v)));
+            }
+            return f;
+          }, []);
+          const [filters, setFilters] = React.useState(initialFilters);
+          const [primaryKey, setPrimaryKey] = React.useState('author');
+          const [secondaryKey, setSecondaryKey] = React.useState('days_bucket');
+
+          const valueOptions = React.useMemo(()=>{
+            const map = {};
+            for (const key of allKeysLocal) {
+              const idx = KEY_INDEX[key];
+              const values = uniqueValues(RAW_DATASET, idx).sort((a,b)=>{
+                if (key==='days_bucket') return Number(a)-Number(b);
+                return String(a).localeCompare(String(b));
+              });
+              map[key] = values;
+            }
+            return map;
+          }, []);
+
+          const { chartLabels, datasets, titleText } = React.useMemo(()=>{
+            const { pivot: pv, totals, primaryKeys, secondaryKeys } = pivot(RAW_DATASET, primaryKey, secondaryKey, filters);
+            const topN = 20;
+            const chartPrimaryKeys = primaryKeys.slice(0, topN);
+            const bucketColors = ['rgba(214, 40, 40, 0.7)','rgba(247, 127, 0, 0.7)','rgba(252, 191, 73, 0.7)','rgba(168, 218, 142, 0.7)','rgba(75, 192, 192, 0.7)','rgba(54, 162, 235, 0.7)','rgba(153, 102, 255, 0.7)','rgba(201, 203, 207, 0.7)'];
+            const ds = secondaryKeys.map((sk,i)=>({
+              label: String(sk),
+              data: chartPrimaryKeys.map(pk => (pv.get(pk)?.get(sk)) || 0),
+              backgroundColor: bucketColors[i % bucketColors.length]
+            }));
+            const title = `Contributions by ${NICE_LABEL[primaryKey]||primaryKey} (Top 20), grouped by ${NICE_LABEL[secondaryKey]||secondaryKey}`;
+            return { chartLabels: chartPrimaryKeys, datasets: ds, titleText: title };
+          }, [filters, primaryKey, secondaryKey]);
+
+          return (
+            <div className="container">
+              <h1>Git Contribution Statistics</h1>
+              <div className="controls">
+                <h2>Controls</h2>
+                <div style={{ display:'flex', gap:'16px', flexWrap:'wrap', alignItems:'center' }}>
+                  <label>
+                    Primary group:
+                    <select value={primaryKey} onChange={e=>setPrimaryKey(e.target.value)}>
+                      {allKeysLocal.map(k=> (
+                        <option key={k} value={k}>{NICE_LABEL[k]||k}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Secondary group:
+                    <select value={secondaryKey} onChange={e=>setSecondaryKey(e.target.value)}>
+                      {allKeysLocal.map(k=> (
+                        <option key={k} value={k}>{NICE_LABEL[k]||k}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div id="filters" style={{ marginTop:'12px', display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'12px' }}>
+                  {allKeysLocal.map(key => (
+                    <MultiSelect
+                      key={key}
+                      label={NICE_LABEL[key]||key}
+                      values={valueOptions[key]}
+                      selectedSet={filters[key]}
+                      onChange={(newSet)=> setFilters(prev=>({ ...prev, [key]: newSet }))}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="chart-container" style={{ marginTop:'20px' }}>
+                <h2 id="chartTitle">{titleText}</h2>
+                <ChartView labels={chartLabels} datasets={datasets} />
+              </div>
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
-</body>
+  </body>
 </html>

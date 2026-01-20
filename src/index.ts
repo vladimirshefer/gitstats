@@ -61,7 +61,7 @@ async function* forEachRepoFile(
 
     const repoName = path.basename(repoRoot);
 
-    let revisionBoundary = await findRevision(repoRoot, 5000);
+    let revisionBoundary = await findRevision(repoRoot, 1000);
 
     const finalTargetPath = path.relative(repoRoot, discoveryPath);
     const { stdout: lsFilesOut } = await execAsync(
