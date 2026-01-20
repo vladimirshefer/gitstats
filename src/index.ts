@@ -161,8 +161,8 @@ export async function* distinctCount(
     }
 }
 
-function getRepoPathsToProcess(): string[] {
-    let repoPathsToProcess: string[] = ["."]
+function getRepoPathsToProcess(inputPaths: string[]): string[] {
+    let repoPathsToProcess: string[] = inputPaths
         .flatMap(it => findRepositories(it, 3));
     repoPathsToProcess = [...new Set(repoPathsToProcess)].sort();
     if (repoPathsToProcess.length === 0) {
@@ -174,8 +174,7 @@ function getRepoPathsToProcess(): string[] {
     return repoPathsToProcess;
 }
 
-// --- Main Application Controller ---
-async function main() {
+async function runScan(args: string[]) {
     const tmpVfs: VirtualFileSystem = new RealFileSystemImpl("./.git-stats/");
 
     process.on('SIGINT', () => {
@@ -189,7 +188,8 @@ async function main() {
 
     const originalCwd = process.cwd();
 
-    let repoPathsToProcess = getRepoPathsToProcess();
+    const inputPaths = (args && args.length > 0) ? args : ['.'];
+    let repoPathsToProcess = getRepoPathsToProcess(inputPaths);
 
     await tmpVfs.write("data.jsonl", "");
 
@@ -201,16 +201,28 @@ async function main() {
     let aggregatedData1 = distinctCount(dataSet);
     let aggregatedData = await AsyncGeneratorUtil.collect(aggregatedData1);
 
-    let useHtml = false;
+    // Keep current behavior: write aggregated data into .git-stats/data.jsonl
+    aggregatedData.forEach(it => tmpVfs.append(`data.jsonl`, JSON.stringify(it) + `\n`));
+}
 
-    if (useHtml) {
-        const htmlFile = './.git-stats/report.html';
-        generateHtmlReport(aggregatedData, htmlFile, originalCwd);
-        console.error(`HTML report generated: ${path.resolve(originalCwd, htmlFile)}`);
-    } else {
-        aggregatedData
-            .forEach ( it => tmpVfs.append(`data.jsonl`, JSON.stringify(it) + `\n`));
+async function runHtml(args: string[]) {
+    const originalCwd = process.cwd();
+    const inputPath = args[0] || path.resolve('./.git-stats/data.jsonl');
+    const outHtml = path.resolve('./.git-stats/report.html');
+
+    if (!fs.existsSync(inputPath)) {
+        console.error(`Input data file not found: ${inputPath}`);
+        process.exitCode = 1;
+        return;
     }
+
+    const lines = fs.readFileSync(inputPath, 'utf8').split(/\r?\n/).filter(Boolean);
+    const aggregatedData = lines.map(line => {
+        try { return JSON.parse(line); } catch { return null; }
+    }).filter(Boolean) as DataRow[];
+
+    generateHtmlReport(aggregatedData, outHtml, originalCwd);
+    console.error(`HTML report generated: ${outHtml}`);
 }
 
 function findRepositories(path: string, depth: number): string[] {
@@ -220,6 +232,19 @@ function findRepositories(path: string, depth: number): string[] {
     if (isGitRepo(path)) return [path];
     let result = getDirectories(path).flatMap(dir => findRepositories(dir, depth - 1));
     return [...new Set(result)].sort();
+}
+
+// --- Main Application Controller ---
+async function main() {
+    const argv = process.argv.slice(2);
+    const isHtml = argv[0] === 'html';
+    const subArgs = isHtml ? argv.slice(1) : argv;
+
+    if (isHtml) {
+        await runHtml(subArgs);
+    } else {
+        await runScan(subArgs);
+    }
 }
 
 // --- Entry Point ---
