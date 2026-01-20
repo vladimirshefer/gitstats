@@ -12,6 +12,7 @@
  */
 
 import {execSync} from 'child_process';
+import {execAsync} from './util/exec';
 import * as fs from 'fs';
 import * as path from 'path';
 import {generateHtmlReport} from './output/report_template';
@@ -64,9 +65,12 @@ async function* forEachRepoFile(
     const repoName = path.basename(repoRoot);
 
     const finalTargetPath = path.relative(repoRoot, discoveryPath);
-    const filesCommand = `git ls-files -- "${finalTargetPath || '.'}"`;
-    const filesOutput = execSync(filesCommand, {cwd: repoRoot, maxBuffer: 1024 * 1024 * 1000}).toString().trim();
-    const files = filesOutput ? filesOutput.split('\n') : [];
+    const { stdout: lsFilesOut } = await execAsync(
+        'git',
+        ['ls-files', '--', finalTargetPath || '.'],
+        { cwd: repoRoot }
+    );
+    const files = lsFilesOut.filter(line => line && line.length > 0);
     let minClusterSize = Math.max(5, files.length / 1000);
     const filesClustered = clusterFiles(
         files,
