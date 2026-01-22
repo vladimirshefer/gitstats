@@ -13,15 +13,9 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- Babel Standalone for in-browser JSX transform -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f8f9fa; color: #212529; }
-        .container { max-width: 900px; margin: 20px auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.05); }
-        h1, h2 { border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
-        .chart-container { margin-top: 20px; }
-    </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="font-sans m-0 bg-gray-50 text-gray-900">
+<div id="root"></div>
     <script type="text/babel" data-presets="react">
         const RAW_DATASET =
             __DATASET_JSON__
@@ -119,14 +113,14 @@
           const total = values.length;
           return (
             <div>
-              <label style={{ display:'block', fontWeight:600, marginBottom:'6px' }}>
-                {label}{' '}
-                <span style={{ color:'#6c757d', fontWeight:400 }}>({selCount}/{total})</span>
-              </label>
+                <label className="block font-semibold mb-1.5">
+                    {label}{' '}
+                    <span className="text-gray-600 font-normal">({selCount}/{total})</span>
+                </label>
               <select
                 multiple
                 size={Math.min(8, Math.max(3, values.length))}
-                style={{ width: '100%' }}
+                className="w-full"
                 onChange={(e)=>{
                   const chosen = Array.from(e.target.selectedOptions).map(o=>o.value);
                   onChange(new Set(chosen));
@@ -191,12 +185,12 @@
           }, [filters, primaryKeyIndex, secondaryKeyIndex]);
 
             return (
-            <div className="container">
-              <h1>Git Contribution Statistics</h1>
-              <div className="controls">
-                <h2>Controls</h2>
-                <div style={{ display:'flex', gap:'16px', flexWrap:'wrap', alignItems:'center' }}>
-                  <label>
+                <div className="max-w-4xl mx-auto my-5 p-5 bg-white rounded-lg shadow-sm">
+                    <h1 className="border-b border-gray-300 pb-2.5">Git Contribution Statistics</h1>
+                    <div className="controls">
+                        <h2 className="border-b border-gray-300 pb-2.5">Controls</h2>
+                        <div className="flex gap-4 flex-wrap items-center">
+                        <label>
                     Primary group:
                       <select value={primaryKeyIndex} onChange={e => setPrimaryKeyIndex(Number(e.target.value))}>
                           {allKeysLocal.map((k, i) => (
@@ -213,8 +207,8 @@
                     </select>
                   </label>
                 </div>
-                <div id="filters" style={{ marginTop:'12px', display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'12px' }}>
-                  {allKeysLocal.map(key => (
+                        <div id="filters" className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+                        {allKeysLocal.map(key => (
                     <MultiSelect
                       key={key}
                       label={key}
@@ -225,9 +219,9 @@
                   ))}
                 </div>
               </div>
-              <div className="chart-container" style={{ marginTop:'20px' }}>
-                <h2 id="chartTitle">{titleText}</h2>
-                <ChartView labels={chartLabels} datasets={datasets} />
+                    <div className="mt-5">
+                        <h2 id="chartTitle" className="border-b border-gray-300 pb-2.5">{titleText}</h2>
+                        <ChartView labels={chartLabels} datasets={datasets} />
               </div>
             </div>
           );
