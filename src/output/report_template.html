@@ -17,6 +17,8 @@
 <body class="font-sans m-0 bg-gray-50 text-gray-900">
 <div id="root"></div>
     <script type="text/babel" data-presets="react">
+        import React from "react";
+
         const RAW_DATASET =
             __DATASET_JSON__
             || [];
@@ -44,6 +46,20 @@
           return Array.from(set);
         }
 
+        function matchesFilters(row, filterState) {
+            for (const key of allKeys) {
+                const idx = KEY_INDEX[key];
+                const sel = filterState[key];
+                if (sel && !sel.has(String(row[idx]))) return false;
+            }
+            return true;
+        }
+
+        function sortByBucket(a, b, key) {
+            if (key === 'days_bucket') return Number(a) - Number(b);
+            return String(a).localeCompare(String(b));
+        }
+
         function pivot(
             dataset,
             primaryKeyIndex,
@@ -51,17 +67,11 @@
             filterState
         ) {
             const pivot = new Map();
-          const totals = new Map();
-          const secValuesSet = new Set();
-          for (const row of dataset) {
-            let ok = true;
-            for (const key of allKeys) {
-              const idx = KEY_INDEX[key];
-              const sel = filterState[key];
-              if (sel && !sel.has(String(row[idx]))) { ok = false; break; }
-            }
-            if (!ok) continue;
-            const pk = row[primaryKeyIndex];
+            const totals = new Map();
+            const secValuesSet = new Set();
+            for (const row of dataset) {
+                if (!matchesFilters(row, filterState)) continue;
+                const pk = row[primaryKeyIndex];
             const sk = row[secondaryKeyIndex];
             const count = Number(row[row.length - COUNT_IDX_FROM_END]) || 0;
             if (!pivot.has(pk)) pivot.set(pk, new Map());
@@ -75,34 +85,35 @@
         }
 
         // ---------- React Components ----------
-        function ChartView({ labels, datasets }){
-          const canvasRef = React.useRef(null);
-          const chartRef = React.useRef(null);
-          React.useEffect(()=>{
-            const ctx = canvasRef.current.getContext('2d');
-            chartRef.current = new Chart(ctx, {
-              type: 'bar',
-              data: { labels: [], datasets: [] },
-              options: {
-                indexAxis: 'y',
-                scales: {
-                  x: { stacked: true, beginAtZero: true },
-                  y: { stacked: true, ticks: { autoSkip: false } }
-                },
-                plugins: {
-                  tooltip: {
+        const CHART_OPTIONS = {
+            indexAxis: 'y',
+            scales: {
+                x: {stacked: true, beginAtZero: true},
+                y: {stacked: true, ticks: {autoSkip: false}}
+            },
+            plugins: {
+                tooltip: {
                     callbacks: {
-                      label: function(context) {
-                        let label = context.dataset.label || '';
-                        if (label) label += ': ';
-                        if (context.parsed.x !== null) label += context.parsed.x.toLocaleString();
-                        return label;
-                      }
+                        label: function (context) {
+                            let label = context.dataset.label || '';
+                            if (label) label += ': ';
+                            if (context.parsed.x !== null) label += context.parsed.x.toLocaleString();
+                            return label;
+                        }
                     }
-                  }
                 }
-              }
-            });
+            }
+        };
+
+        function ChartView({labels, datasets}) {
+            const canvasRef = React.useRef(null);
+            const chartRef = React.useRef(null);
+            React.useEffect(() => {
+                chartRef.current = new Chart(canvasRef.current.getContext('2d'), {
+                    type: 'bar',
+                    data: {labels: [], datasets: []},
+                    options: CHART_OPTIONS
+                });
             return ()=>{ chartRef.current && chartRef.current.destroy(); };
           }, []);
 
@@ -117,22 +128,19 @@
         }
 
         function MultiSelect({ label, values, selectedSet, onChange }){
-          const selCount = selectedSet.size;
-          const total = values.length;
-          return (
-            <div>
-                <label className="block font-semibold mb-1.5">
-                    {label}{' '}
-                    <span className="text-gray-600 font-normal">({selCount}/{total})</span>
-                </label>
-              <select
-                multiple
-                size={Math.min(8, Math.max(3, values.length))}
-                className="w-full"
-                onChange={(e)=>{
-                  const chosen = Array.from(e.target.selectedOptions).map(o=>o.value);
-                  onChange(new Set(chosen));
-                }}
+            return (
+                <div>
+                    <label className="block font-semibold mb-1.5">
+                        {label}{' '}
+                        <span className="text-gray-600 font-normal">({selectedSet.size}/{values.length})</span>
+                    </label>
+                    <select
+                        multiple
+                        size={Math.min(8, Math.max(3, values.length))}
+                        className="w-full"
+                        onChange={(e) => {
+                            onChange(new Set(Array.from(e.target.selectedOptions).map(o => o.value)));
+                        }}
               >
                   {values.map(v => {
                       const strVal = String(v);
@@ -153,10 +161,7 @@
                 const options = {};
                 for (const key of allKeys) {
                     const idx = KEY_INDEX[key];
-                    const values = uniqueValues(RAW_DATASET, idx).sort((a, b) => {
-                        if (key === 'days_bucket') return Number(a) - Number(b);
-                        return String(a).localeCompare(String(b));
-                    });
+                    const values = uniqueValues(RAW_DATASET, idx).sort((a, b) => sortByBucket(a, b, key));
                     filters[key] = new Set(values.map(v => String(v)));
                     options[key] = values;
                 }
