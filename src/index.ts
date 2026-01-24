@@ -243,13 +243,32 @@ function findRepositories(path: string, depth: number): string[] {
 // --- Main Application Controller ---
 async function main() {
     const argv = process.argv.slice(2);
-    const isHtml = argv[0] === 'html';
-    const subArgs = isHtml ? argv.slice(1) : argv;
+    let subcommand = argv[0];
 
-    if (isHtml) {
-        await runHtml(subArgs);
-    } else {
-        await runScan(subArgs);
+    let subcommandsMenu = {
+        "html": {
+            description: "Generates an HTML report from the aggregated data.",
+            usage: "git-stats html [input-data-file]"
+        },
+        "scan": {
+            description: "Scans a directory tree for Git repositories and generates aggregated data.",
+            usage: "git-stats scan [input-dir] > {output-file}.jsonl"
+        }
+    }
+
+    if (subcommand === 'scan') {
+        await runScan(argv.slice(1));
+        return;
+    }
+
+    if (subcommand === 'html') {
+        await runHtml(argv.slice(1));
+        return;
+    }
+
+    console.error(`Usage: git-stats <subcommand> [args]\n\nAvailable subcommands:`);
+    for (const [name, {description, usage}] of Object.entries(subcommandsMenu)) {
+        console.error(`- ${name}: ${description}\n    Usage: ${usage}`);
     }
 }
 
