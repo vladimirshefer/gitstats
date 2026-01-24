@@ -8,15 +8,27 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.plot.ly/plotly-3.3.0.min.js" charset="utf-8"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <!-- React 18 UMD builds -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Preact UMD build -->
+    <script crossorigin src="https://unpkg.com/preact@10/dist/preact.umd.js"></script>
+    <script crossorigin src="https://unpkg.com/preact@10/hooks/dist/hooks.umd.js"></script>
     <!-- Babel Standalone for in-browser JSX transform -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="font-sans m-0 bg-gray-50 text-gray-900">
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
+    // Preact compat aliases
+    const React = window.preact;
+    const ReactDOM = {
+        createRoot: (container) => ({
+            render: (element) => window.preact.render(element, container)
+        })
+    };
+    React.useRef = window.preactHooks.useRef;
+    React.useEffect = window.preactHooks.useEffect;
+    React.useState = window.preactHooks.useState;
+    React.useMemo = window.preactHooks.useMemo;
+
     const RAW_DATASET =
         __DATASET_JSON__
         || [];
