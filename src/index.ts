@@ -23,49 +23,52 @@ import {distinctCount} from "./util/dataset";
 
 let sigintCaught = false;
 
-function getDirectories(source: string): string[] {
-    if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) return [];
+function getDirectories(absoluteDirPath: string): string[] {
+    if (!fs.existsSync(absoluteDirPath) || !fs.statSync(absoluteDirPath).isDirectory()) return [];
     const ignoredDirs = new Set(['.git', 'node_modules']);
     try {
-        return fs.readdirSync(source, {withFileTypes: true})
+        return fs.readdirSync(absoluteDirPath, {withFileTypes: true})
             .filter(dirent => dirent.isDirectory() && !ignoredDirs.has(dirent.name))
-            .map(dirent => path.join(source, dirent.name));
+            .map(dirent => path.join(absoluteDirPath, dirent.name));
     } catch (error) {
-        console.error(`Could not read directory: ${source}`);
+        console.error(`Could not read directory: ${absoluteDirPath}`);
         return [];
     }
 }
 
 async function* forEachRepoFile(
-    repoPath: string,
-    doProcessFile: (repoRoot: string, fileName: string, revisionBoundary: string | undefined) => Promise<DataRow[]>
+    repoRelativePath: string,
+    doProcessFile: (absoluteRepoRoot: string, fileName: string, revisionBoundary: string | undefined) => Promise<DataRow[]>
 ): AsyncGenerator<DataRow> {
-    console.error(`\nProcessing repository: ${repoPath || '.'}`);
+    console.error(`\nProcessing repository: ${repoRelativePath || '.'}`);
 
     const originalCwd = process.cwd();
-    const discoveryPath = path.resolve(originalCwd, repoPath);
-    if (!fs.existsSync(discoveryPath)) {
-        console.error(`Error: Path does not exist: ${discoveryPath}. Skipping.`);
+    const absoluteDiscoveryPath = path.resolve(originalCwd, repoRelativePath);
+    if (!fs.existsSync(absoluteDiscoveryPath)) {
+        console.error(`Error: Path does not exist: ${absoluteDiscoveryPath}. Skipping.`);
         return;
     }
 
-    const gitCommandPath = fs.statSync(discoveryPath).isDirectory() ? discoveryPath : path.dirname(discoveryPath);
+    const absoluteGitCommandPath = fs.statSync(absoluteDiscoveryPath).isDirectory() ? absoluteDiscoveryPath : path.dirname(absoluteDiscoveryPath);
 
-    let repoRoot: string;
+    let absoluteRepoRoot: string;
     try {
-        repoRoot = execSync('git rev-parse --show-toplevel', {cwd: gitCommandPath, stdio: 'pipe'}).toString().trim();
+        absoluteRepoRoot = execSync('git rev-parse --show-toplevel', {
+            cwd: absoluteGitCommandPath,
+            stdio: 'pipe'
+        }).toString().trim();
     } catch (e) {
-        console.error(`Error: Could not find git repository at ${gitCommandPath}. Skipping.`);
+        console.error(`Error: Could not find git repository at ${absoluteGitCommandPath}. Skipping.`);
         return;
     }
 
-    const repoName = path.basename(repoRoot);
+    const repoName = path.basename(absoluteRepoRoot);
 
-    let revisionBoundary = await findRevision(repoRoot, 1000);
+    let revisionBoundary = await findRevision(absoluteRepoRoot, 1000);
 
-    const files = await git_ls_files(repoRoot, path.relative(repoRoot, discoveryPath));
+    const files = await git_ls_files(absoluteRepoRoot, path.relative(absoluteRepoRoot, absoluteDiscoveryPath));
     let minClusterSize = Math.floor(Math.max(5, files.length / 1000));
-    let maxClusterSize = Math.round(Math.max(20, minClusterSize*2));
+    let maxClusterSize = Math.round(Math.max(20, minClusterSize * 2));
     console.error(`Clustering ${files.length} into ${minClusterSize}..${maxClusterSize}+ sized chunks`);
     const filesClustered = clusterFiles(
         files,
@@ -87,7 +90,7 @@ async function* forEachRepoFile(
 
         try {
             let clusterPath = clusterPaths.find(it => file.startsWith(it)) ?? "$$$unknown$$$";
-            yield* (await doProcessFile(repoRoot, file, revisionBoundary)).map(it => it.concat(clusterPath) as DataRow);
+            yield* (await doProcessFile(absoluteRepoRoot, file, revisionBoundary)).map(it => it.concat(clusterPath) as DataRow);
         } catch (e: any) {
             if (e.signal === 'SIGINT') sigintCaught = true;
             // Silently skip files that error
@@ -111,28 +114,28 @@ function bucket(n: number, buckets: number[]): number {
     return -1;
 }
 
-async function doProcessFile1(repoRoot: string, filePath: string, revisionBoundary?: string): Promise<DataRow[]> {
-    if (!filePath) return [];
-    const absPath = path.join(repoRoot, filePath);
+async function doProcessFile1(absoluteRepoRoot: string, repoRelativeFilePath: string, revisionBoundary?: string): Promise<DataRow[]> {
+    if (!repoRelativeFilePath) return [];
+    const absoluteFilePath = path.join(absoluteRepoRoot, repoRelativeFilePath);
     let stat: fs.Stats | null = null;
     try {
-        stat = fs.statSync(absPath);
-    } catch(e: any) {
-        console.error(`Fail get stats for file ${absPath}`, e.stack || e.message || e);
+        stat = fs.statSync(absoluteFilePath);
+    } catch (e: any) {
+        console.error(`Fail get stats for file ${absoluteFilePath}`, e.stack || e.message || e);
     }
     if (!stat || !stat.isFile() || stat.size === 0) return [];
 
     const result: DataRow[] = []
-    for (const item of await git_blame_porcelain(filePath, repoRoot, ["author", "committer-time", "commit"], revisionBoundary + "..HEAD")) {
+    for (const item of await git_blame_porcelain(repoRelativeFilePath, absoluteRepoRoot, ["author", "committer-time", "commit"], revisionBoundary + "..HEAD")) {
         if (revisionBoundary === item[2]) {
             item[0] = "?"
             item[1] = 0
             item[2] = "0".repeat(40)
         }
-        const lang = path.extname(filePath) || 'Other';
+        const lang = path.extname(repoRelativeFilePath) || 'Other';
         let days_bucket = bucket(daysAgo(item[1] as number), [0, 30, 300, 1000, 1000000]);
         if (days_bucket != -1) {
-            result.push([item[0], days_bucket, lang, filePath, repoRoot]);
+            result.push([item[0], days_bucket, lang, repoRelativeFilePath, absoluteRepoRoot]);
         }
     }
     return result;
@@ -172,7 +175,7 @@ async function runScan(args: string[]) {
     await tmpVfs.write("data.jsonl", "");
 
     let dataSet = new AsyncIteratorWrapperImpl(AsyncGeneratorUtil.of(repoPathsToProcess))
-        .flatMap(repoPath => forEachRepoFile(repoPath, doProcessFile1))
+        .flatMap(repoRelativePath => forEachRepoFile(repoRelativePath, doProcessFile1))
         .map(it => [it[0], it[1], it[2], it[5], path.basename(it[4] as string)])
         .get();
 
@@ -184,30 +187,34 @@ async function runScan(args: string[]) {
 }
 
 async function runHtml(args: string[]) {
-    const inputPath = args[0] || path.resolve('./.git-stats/data.jsonl');
-    const outHtml = path.resolve('./.git-stats/report.html');
+    const absoluteInputPath = args[0] || path.resolve('./.git-stats/data.jsonl');
+    const absoluteOutHtml = path.resolve('./.git-stats/report.html');
 
-    if (!fs.existsSync(inputPath)) {
-        console.error(`Input data file not found: ${inputPath}`);
+    if (!fs.existsSync(absoluteInputPath)) {
+        console.error(`Input data file not found: ${absoluteInputPath}`);
         process.exitCode = 1;
         return;
     }
 
-    const lines = fs.readFileSync(inputPath, 'utf8').split(/\r?\n/).filter(Boolean);
+    const lines = fs.readFileSync(absoluteInputPath, 'utf8').split(/\r?\n/).filter(Boolean);
     const aggregatedData = lines.map(line => {
-        try { return JSON.parse(line); } catch { return null; }
+        try {
+            return JSON.parse(line);
+        } catch {
+            return null;
+        }
     }).filter(Boolean) as DataRow[];
 
-    generateHtmlReport(aggregatedData, outHtml);
-    console.error(`HTML report generated: ${outHtml}`);
+    generateHtmlReport(aggregatedData, absoluteOutHtml);
+    console.error(`HTML report generated: ${absoluteOutHtml}`);
 }
 
-function findRepositories(path: string, depth: number): string[] {
+function findRepositories(absolutePath: string, depth: number): string[] {
     if (depth <= 0) return [];
-    if (!fs.existsSync(path)) throw new Error(`Path does not exist: ${path}`);
-    if (!fs.statSync(path).isDirectory()) return [];
-    if (isGitRepo(path)) return [path];
-    let result = getDirectories(path).flatMap(dir => findRepositories(dir, depth - 1));
+    if (!fs.existsSync(absolutePath)) throw new Error(`Path does not exist: ${absolutePath}`);
+    if (!fs.statSync(absolutePath).isDirectory()) return [];
+    if (isGitRepo(absolutePath)) return [absolutePath];
+    let result = getDirectories(absolutePath).flatMap(dir => findRepositories(dir, depth - 1));
     return distinct(result).sort();
 }
 
