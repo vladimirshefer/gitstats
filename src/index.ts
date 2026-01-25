@@ -138,10 +138,13 @@ async function doProcessFile1(repoRoot: string, filePath: string, revisionBounda
     return result;
 }
 
+function distinct<T>(arr: T[]): T[] {
+    return [...new Set(arr)];
+}
+
 function getRepoPathsToProcess(inputPaths: string[]): string[] {
-    let repoPathsToProcess: string[] = inputPaths
-        .flatMap(it => findRepositories(it, 3));
-    repoPathsToProcess = [...new Set(repoPathsToProcess)].sort();
+    let repoPathsToProcess: string[] = inputPaths.flatMap(it => findRepositories(it, 3));
+    repoPathsToProcess = distinct(repoPathsToProcess).sort();
     if (repoPathsToProcess.length === 0) {
         throw new Error("No git repositories found to analyze.");
     }
@@ -205,7 +208,7 @@ function findRepositories(path: string, depth: number): string[] {
     if (!fs.statSync(path).isDirectory()) return [];
     if (isGitRepo(path)) return [path];
     let result = getDirectories(path).flatMap(dir => findRepositories(dir, depth - 1));
-    return [...new Set(result)].sort();
+    return distinct(result).sort();
 }
 
 // --- Main Application Controller ---
