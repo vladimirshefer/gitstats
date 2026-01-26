@@ -96,7 +96,7 @@
         const grouped2 = new Map();
         const grouped1 = new Map();
         const secValuesSet = new Set();
-        for (const row of filteredDataset) {
+        for (const row of dataset) {
             const c1 = row[column1];
             const c2 = row[column2];
             const count = Number(row[row.length - COUNT_IDX_FROM_END]) || 0;
@@ -396,7 +396,7 @@
         const {chartLabels, datasets} = React.useMemo(() => {
             let filteredDataset = RAW_DATASET.filter(row => {
                 for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
-                    const sel = filterState[idx + ""];
+                    const sel = filters[idx + ""];
                     if (sel && !sel.has(String(row[idx]))) {
                         return false;
                     }
