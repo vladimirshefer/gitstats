@@ -46,8 +46,6 @@
     })
     const UNIQUE_VALUES = COLUMNS_IDX_ARRAY.map((idx) => uniqueValues(RAW_DATASET, idx).sort(COLUMN_COMPARATORS[idx]))
 
-    console.log("UN", COLUMNS_IDX_ARRAY)
-
     const TOP_N = 20;
     const BUCKET_COLORS = [
         'rgba(214, 40, 40, 0.7)',
@@ -65,13 +63,22 @@
         return Array.from(set);
     }
 
+    function matchesFilters(row, filters) {
+        for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
+            const sel = filters[idx];
+            if (sel && !sel.has(String(row[idx]))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     function pivot(
         dataset,
         column1,
         column2
     ) {
         const grouped2 = new Map();
-        const grouped1 = new Map();
         const secValuesSet = new Set();
         for (const row of dataset) {
             const c1 = row[column1];
@@ -79,14 +86,17 @@
             const count = Number(row[row.length - COUNT_IDX_FROM_END]) || 0;
             if (!grouped2.has(c1)) grouped2.set(c1, new Map());
             grouped2.get(c1).set(c2, (grouped2.get(c1).get(c2) || 0) + count);
-
-            grouped1.set(c1, (grouped1.get(c1) || 0) + count);
-
             secValuesSet.add(c2);
         }
-        const primaryKeys = Array.from(grouped2.keys()).sort((a, b) => (grouped1.get(b) || 0) - (grouped1.get(a) || 0));
+        const primaryTotals = new Map();
+        for (const [c1, innerMap] of grouped2) {
+            let total = 0;
+            for (const val of innerMap.values()) total += val;
+            primaryTotals.set(c1, total);
+        }
+        const primaryKeys = Array.from(grouped2.keys()).sort((a, b) => (primaryTotals.get(b) || 0) - (primaryTotals.get(a) || 0));
         const secondaryKeys = Array.from(secValuesSet).sort((a, b) => String(a).localeCompare(String(b)));
-        return {grouped2, grouped1, primaryKeys, secondaryKeys};
+        return {grouped2, primaryKeys, secondaryKeys};
     }
 
     // ---------- React Components ----------
@@ -135,19 +145,7 @@
 
     // ---------- Sunburst over repository paths (clusterPath) ----------
     function buildSunburst(dataset, filterState) {
-        // Filter rows according to current filters
-        const filtered = [];
-        for (const row of dataset) {
-            let ok = true;
-            for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
-                const sel = filterState[idx + ""];
-                if (sel && !sel.has(String(row[idx]))) {
-                    ok = false;
-                    break;
-                }
-            }
-            if (ok) filtered.push(row);
-        }
+        const filtered = dataset.filter(row => matchesFilters(row, filterState));
 
         const PSEUDO_ROOT = "@";
         // Aggregate counts per path and propagate sums up the tree
@@ -271,12 +269,12 @@
         const selCount = selectedSet.size;
         const total = values.length;
 
-        const toggleValue = (strVal) => {
+        const toggleValue = (val) => {
             const newSet = new Set(selectedSet);
-            if (newSet.has(strVal)) {
-                newSet.delete(strVal);
+            if (newSet.has(val)) {
+                newSet.delete(val);
             } else {
-                newSet.add(strVal);
+                newSet.add(val);
             }
             onChange(newSet);
         };
@@ -331,20 +329,20 @@
                                 <div className="px-3 py-2 text-gray-500 text-center">No matches found</div>
                             ) : (
                                 filteredValues.map(v => {
-                                    const strVal = String(v);
-                                    const isChecked = selectedSet.has(strVal);
+                                    const val = String(v);
+                                    const isChecked = selectedSet.has(val);
                                     return (
                                         <label
-                                            key={strVal}
+                                            key={val}
                                             className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
                                         >
                                             <input
                                                 type="checkbox"
                                                 checked={isChecked}
-                                                onChange={() => toggleValue(strVal)}
+                                                onChange={() => toggleValue(val)}
                                                 className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                                             />
-                                            <span className="text-gray-900">{strVal}</span>
+                                            <span className="text-gray-900">{val}</span>
                                         </label>
                                     );
                                 })
@@ -361,8 +359,8 @@
             const filters = {};
             const options = {};
             for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
-                filters[idx + ""] = new Set(UNIQUE_VALUES[idx].map(v => String(v)));
-                options[idx + ""] = UNIQUE_VALUES[idx];
+                filters[idx] = new Set(UNIQUE_VALUES[idx].map(v => String(v)));
+                options[idx] = UNIQUE_VALUES[idx];
             }
             return {initialFilters: filters, valueOptions: options};
         }, []);
@@ -371,15 +369,7 @@
         const [secondaryKeyIndex, setSecondaryKeyIndex] = React.useState(1);
 
         const {chartLabels, datasets} = React.useMemo(() => {
-            let filteredDataset = RAW_DATASET.filter(row => {
-                for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
-                    const sel = filters[idx + ""];
-                    if (sel && !sel.has(String(row[idx]))) {
-                        return false;
-                    }
-                }
-                return true;
-            });
+            const filteredDataset = RAW_DATASET.filter(row => matchesFilters(row, filters));
             const {
                 grouped2: pv,
                 primaryKeys,
@@ -423,9 +413,9 @@
                             <MultiSelect
                                 key={idx}
                                 label={RAW_DATASET_SCHEMA[idx]}
-                                values={valueOptions[idx + ""]}
-                                selectedSet={filters[idx + ""]}
-                                onChange={(newSet) => setFilters(prev => ({...prev, [idx + ""]: newSet}))}
+                                values={valueOptions[idx]}
+                                selectedSet={filters[idx]}
+                                onChange={(newSet) => setFilters(prev => ({...prev, [idx]: newSet}))}
                             />
                         ))}
                     </div>
