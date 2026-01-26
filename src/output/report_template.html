@@ -16,6 +16,7 @@
 </head>
 <body class="font-sans m-0 bg-gray-50 text-gray-900">
 <div id="root"></div>
+</body>
 <script type="text/babel" data-presets="react">
     // Preact compat aliases
     const React = window.preact;
@@ -33,12 +34,43 @@
         __DATASET_JSON__
         || [];
     // Fixed schema as per pipeline: [author, days_bucket, lang, clusterPath, repoName, count]
-    const HEADER_LABELS = ["author", "days_bucket", "lang", "clusterPath", "repoName", "count"];
+    const RAW_DATASET_SCHEMA = ["author", "days_bucket", "lang", "clusterPath", "repoName", "count"];
     // -------- Client-side grouping/filtering engine --------
-    const KEY_INDEX = Object.fromEntries(HEADER_LABELS.map((k, i) => [k, i]));
+    const KEY_INDEX = Object.fromEntries(RAW_DATASET_SCHEMA.map((k, i) => [k, i]));
+    const COLUMNS_AMOUNT = RAW_DATASET_SCHEMA.length - 1;
+    const COLUMNS_IDX_ARRAY = Array(COLUMNS_AMOUNT).fill(-1).map((_, i) => i);
     const COUNT_IDX_FROM_END = 1; // last element is count
+    const COLUMN_COMPARATORS = COLUMNS_IDX_ARRAY.map(idx => {
+        let isNumber = typeof RAW_DATASET?.[0]?.[idx] === "number";
+        return isNumber ? ((a, b) => (a || 0) - (b || 0)) : (a, b) => String(a).localeCompare(String(b));
+    })
+    const UNIQUE_VALUES = COLUMNS_IDX_ARRAY.map((idx) => uniqueValues(RAW_DATASET, idx).sort(COLUMN_COMPARATORS[idx]))
 
-    const allKeys = HEADER_LABELS.filter(k => k !== 'count');
+    console.log("UN", COLUMNS_IDX_ARRAY)
+
+    function property(initialValue) {
+        let value = initialValue;
+        const listeners = new Set();
+
+        return Object.freeze({
+            get() {
+                return value;
+            },
+
+            set(newValue) {
+                if (Object.is(value, newValue)) return;
+                value = newValue;
+                listeners.forEach(fn => fn(value));
+            },
+
+            listen(fn) {
+                listeners.add(fn);
+                // optional: return unsubscribe function
+                return () => listeners.delete(fn);
+            }
+        });
+    }
+
     const TOP_N = 20;
     const BUCKET_COLORS = [
         'rgba(214, 40, 40, 0.7)',
@@ -59,22 +91,11 @@
     function pivot(
         dataset,
         column1,
-        column2,
-        filterState
+        column2
     ) {
         const grouped2 = new Map();
         const grouped1 = new Map();
         const secValuesSet = new Set();
-        let filteredDataset = dataset.filter(row => {
-            for (const key of allKeys) {
-                const idx = KEY_INDEX[key];
-                const sel = filterState[key];
-                if (sel && !sel.has(String(row[idx]))) {
-                    return false;
-                }
-            }
-            return true;
-        });
         for (const row of filteredDataset) {
             const c1 = row[column1];
             const c2 = row[column2];
@@ -141,9 +162,8 @@
         const filtered = [];
         for (const row of dataset) {
             let ok = true;
-            for (const key of allKeys) {
-                const idx = KEY_INDEX[key];
-                const sel = filterState[key];
+            for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
+                const sel = filterState[idx + ""];
                 if (sel && !sel.has(String(row[idx]))) {
                     ok = false;
                     break;
@@ -155,7 +175,7 @@
         const PSEUDO_ROOT = "@";
         // Aggregate counts per path and propagate sums up the tree
         const LEAF_IDX = KEY_INDEX['clusterPath'];
-        const COUNT_IDX = HEADER_LABELS.length - COUNT_IDX_FROM_END;
+        const COUNT_IDX = RAW_DATASET_SCHEMA.length - COUNT_IDX_FROM_END;
         const leafSums = new Map(); // fullPath -> sum
         const allPaths = new Set(); // includes all prefixes (no empty)
 
@@ -363,14 +383,9 @@
         const {initialFilters, valueOptions} = React.useMemo(() => {
             const filters = {};
             const options = {};
-            for (const key of allKeys) {
-                const idx = KEY_INDEX[key];
-                const values = uniqueValues(RAW_DATASET, idx).sort((a, b) => {
-                    if (key === 'days_bucket') return Number(a) - Number(b);
-                    return String(a).localeCompare(String(b));
-                });
-                filters[key] = new Set(values.map(v => String(v)));
-                options[key] = values;
+            for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
+                filters[idx + ""] = new Set(UNIQUE_VALUES[idx].map(v => String(v)));
+                options[idx + ""] = UNIQUE_VALUES[idx];
             }
             return {initialFilters: filters, valueOptions: options};
         }, []);
@@ -379,11 +394,20 @@
         const [secondaryKeyIndex, setSecondaryKeyIndex] = React.useState(1);
 
         const {chartLabels, datasets} = React.useMemo(() => {
+            let filteredDataset = RAW_DATASET.filter(row => {
+                for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
+                    const sel = filterState[idx + ""];
+                    if (sel && !sel.has(String(row[idx]))) {
+                        return false;
+                    }
+                }
+                return true;
+            });
             const {
                 grouped2: pv,
                 primaryKeys,
                 secondaryKeys
-            } = pivot(RAW_DATASET, primaryKeyIndex, secondaryKeyIndex, filters);
+            } = pivot(filteredDataset, primaryKeyIndex, secondaryKeyIndex);
             const chartPrimaryKeys = primaryKeys.slice(0, TOP_N);
             const ds = secondaryKeys.map((sk, i) => ({
                 label: String(sk),
@@ -402,8 +426,8 @@
                         <label>
                             Primary group:
                             <select value={primaryKeyIndex} onChange={e => setPrimaryKeyIndex(Number(e.target.value))}>
-                                {allKeys.map((__, i) => (
-                                    <option key={i} value={i}>{HEADER_LABELS[i]}</option>
+                                {COLUMNS_IDX_ARRAY.map((__, i) => (
+                                    <option key={i} value={i}>{RAW_DATASET_SCHEMA[i]}</option>
                                 ))}
                             </select>
                         </label>
@@ -411,20 +435,20 @@
                             Secondary group:
                             <select value={secondaryKeyIndex}
                                     onChange={e => setSecondaryKeyIndex(Number(e.target.value))}>
-                                {allKeys.map((__, i) => (
-                                    <option key={i} value={i}>{HEADER_LABELS[i]}</option>
+                                {COLUMNS_IDX_ARRAY.map((__, i) => (
+                                    <option key={i} value={i}>{RAW_DATASET_SCHEMA[i]}</option>
                                 ))}
                             </select>
                         </label>
                     </div>
                     <div id="filters" className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-                        {allKeys.map((key, idx) => (
+                        {COLUMNS_IDX_ARRAY.map((__, idx) => (
                             <MultiSelect
                                 key={idx}
-                                label={HEADER_LABELS[idx]}
-                                values={valueOptions[key]}
-                                selectedSet={filters[key]}
-                                onChange={(newSet) => setFilters(prev => ({...prev, [key]: newSet}))}
+                                label={RAW_DATASET_SCHEMA[idx]}
+                                values={valueOptions[idx + ""]}
+                                selectedSet={filters[idx + ""]}
+                                onChange={(newSet) => setFilters(prev => ({...prev, [idx + ""]: newSet}))}
                             />
                         ))}
                     </div>
@@ -445,5 +469,4 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App/>);
 </script>
-</body>
 </html>
