@@ -213,9 +213,6 @@ async function main() {
     }
 }
 
-// --- Entry Point ---
-main().catch(console.error);
-
 // --- Utility Functions ---
 namespace util {
     export function distinct<T>(arr: T[]): T[] {
@@ -235,3 +232,6 @@ namespace util {
         return -1;
     }
 }
+
+// --- Entry Point ---
+main().catch(console.error);
