@@ -101,14 +101,58 @@
 
     function computeColumnTotals(dataset, columnIdx) {
         const totals = new Map();
+        const otherColumnContributions = new Map(); // Map<key, Map<otherColumnIdx, Map<otherValue, count>>>
+
         for (const row of dataset) {
             const key = row[columnIdx];
             const count = Number(row[row.length - COUNT_IDX_FROM_END]) || 0;
             totals.set(key, (totals.get(key) || 0) + count);
+
+            // Track contributions from other columns
+            if (!otherColumnContributions.has(key)) {
+                otherColumnContributions.set(key, new Map());
+            }
+            const keyContribs = otherColumnContributions.get(key);
+
+            for (let otherIdx = 0; otherIdx < COLUMNS_AMOUNT; otherIdx++) {
+                if (otherIdx === columnIdx) continue;
+
+                if (!keyContribs.has(otherIdx)) {
+                    keyContribs.set(otherIdx, new Map());
+                }
+                const otherColMap = keyContribs.get(otherIdx);
+                const otherValue = row[otherIdx];
+                otherColMap.set(otherValue, (otherColMap.get(otherValue) || 0) + count);
+            }
         }
+
         const sorted = Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
+
         return {
-            labels: sorted.map(([k]) => String(k)),
+            labels: sorted.map(([k]) => {
+                const total = totals.get(k);
+                const keyContribs = otherColumnContributions.get(k);
+                const topContribs = [];
+
+                for (let otherIdx = 0; otherIdx < COLUMNS_AMOUNT; otherIdx++) {
+                    if (otherIdx === columnIdx) continue;
+
+                    const otherColMap = keyContribs.get(otherIdx);
+                    if (otherColMap) {
+                        const top3 = Array.from(otherColMap.entries())
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 3)
+                            .map(([val, cnt]) => `${RAW_DATASET_SCHEMA[otherIdx]}:${val}(${cnt})`)
+                            .join(', ');
+                        if (top3) {
+                            topContribs.push(top3);
+                        }
+                    }
+                }
+
+                const label = `${String(k)} (${total})`;
+                return topContribs.length > 0 ? `${label}<br>${topContribs.join('<br>')}` : label;
+            }),
             values: sorted.map(([, v]) => v)
         };
     }
