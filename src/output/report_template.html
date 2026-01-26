@@ -153,7 +153,7 @@
                         const top3 = Array.from(otherColMap.entries())
                             .sort((a, b) => b[1] - a[1])
                             .slice(0, 3)
-                            .map(([val, cnt]) => `${val}(${cnt})`)
+                            .map(([val, cnt]) => `${val}(${(cnt/total*100.0).toFixed(1)}%)`)
                             .join('<br>-');
                         if (top3) {
                             topContribs.push(`${RAW_DATASET_SCHEMA[otherIdx]}<br>-`+top3);
