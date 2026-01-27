@@ -6,7 +6,7 @@ describe('test cluster files', () => {
     it('empty list', () => {
         const files: string[] = []
         let clustered = clusterFiles(files, 10, 1);
-        expect(clustered.map(it => it.files)).toStrictEqual([[]]);
+        expect(clustered.map(it => it.files)).toStrictEqual([]);
     });
 
     it('single file', () => {
@@ -27,12 +27,6 @@ describe('test cluster files', () => {
             "src/test/java/BarTest.java",
             "src/test/java/BazTest.java",
             ".gitignore"
-        ]
-        const files2 = [
-            "src/main/java/:3",
-            "src/main/resources/:1",
-            "src/test/java/:3",
-            ":1"
         ]
         let clustered = clusterFiles(files, 5, 1);
         expect(clustered).toStrictEqual([
@@ -173,7 +167,6 @@ describe('test cluster files', () => {
             }
         ]);
     })
-
 
     it('g', () => {
         const files = [

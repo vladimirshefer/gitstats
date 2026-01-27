@@ -1,24 +1,11 @@
+import value from "*.html";
+import path from "path";
+
 export type FileTreeCluster = {
     path: string,
     files: string[],
     weight: number,
     isLeftovers: boolean
-}
-
-function mostFrequent<T extends keyof any>(arr: T[]): T {
-    const counts: Record<T, number> = {} as Record<T, number>;
-    for (const item of arr) {
-        counts[item] = (counts[item] || 0) + 1;
-    }
-    let maxCount = 0;
-    let mostFrequentItem: T = arr[0];
-    for (const item in counts) {
-        if (counts[item] > maxCount) {
-            maxCount = counts[item];
-            mostFrequentItem = item;
-        }
-    }
-    return mostFrequentItem;
 }
 
 export namespace graph {
@@ -42,7 +29,7 @@ export namespace graph {
             let targetDir = result;
             file.arr.slice(0, -1).forEach(pathSegment => {
                 targetDir.size++
-                if (!targetDir.children[pathSegment]) {
+                if (!Object.prototype.hasOwnProperty.call(targetDir.children, pathSegment)) {
                     targetDir.children[pathSegment] = {
                         path: targetDir.path.concat([pathSegment]),
                         children: {},
