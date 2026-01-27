@@ -5,6 +5,69 @@ export type FileTreeCluster = {
     isLeftovers: boolean
 }
 
+function mostFrequent<T extends keyof any>(arr: T[]): T {
+    const counts: Record<T, number> = {} as Record<T, number>;
+    for (const item of arr) {
+        counts[item] = (counts[item] || 0) + 1;
+    }
+    let maxCount = 0;
+    let mostFrequentItem: T = arr[0];
+    for (const item in counts) {
+        if (counts[item] > maxCount) {
+            maxCount = counts[item];
+            mostFrequentItem = item;
+        }
+    }
+    return mostFrequentItem;
+}
+
+function clusterFiles1(
+    originalCluster: Cluster,
+    clusterMaxSize: number,
+    clusterMinSize: number
+): Cluster[] | null {
+    if (originalCluster.files.length <= clusterMaxSize || originalCluster.isUnclusterable) {
+        return null;
+    }
+
+    let l = originalCluster.path.length // next path segment index
+    let mf = mostFrequent(originalCluster.files.map(it => it.arr[l] || "$$$notfound$$$"))
+    let newClusterFiles: FileInfo[] = []
+    let remainingFiles = originalCluster.files.filter(it => {
+        let nextPathSegment = it.arr[l];
+        if (nextPathSegment === mf) {
+            newClusterFiles.push(it)
+            return false
+        } else {
+            return true
+        }
+    });
+    if (remainingFiles.length === 0) {
+        return [
+            {
+                path: originalCluster.path.concat([mf]),
+                files: newClusterFiles,
+                isLeftovers: false
+            } as Cluster
+        ];
+    }
+    if (newClusterFiles.length < clusterMinSize || remainingFiles.length < clusterMinSize) {
+        return [{...originalCluster, isUnclusterable: true} as Cluster];
+    }
+    return [
+        {
+            path: originalCluster.path.concat([mf]),
+            files: newClusterFiles,
+            isLeftovers: false
+        } as Cluster,
+        {
+            path: originalCluster.path,
+            files: remainingFiles,
+            isLeftovers: true
+        } as Cluster
+    ];
+}
+
 export function clusterFiles(
     files: string[],
     clusterMaxSize: number,
@@ -18,66 +81,15 @@ export function clusterFiles(
     let clusterGroups: Cluster[] = [initialCluster];
     let changes = true;
 
-    function mostFrequent<T extends keyof any>(arr: T[]): T {
-        const counts: Record<T, number> = {} as Record<T, number>;
-        for (const item of arr) {
-            counts[item] = (counts[item] || 0) + 1;
-        }
-        let maxCount = 0;
-        let mostFrequentItem: T = arr[0];
-        for (const item in counts) {
-            if (counts[item] > maxCount) {
-                maxCount = counts[item];
-                mostFrequentItem = item;
-            }
-        }
-        return mostFrequentItem;
-    }
-
     while (changes) {
         changes = false;
         clusterGroups = clusterGroups.flatMap((originalCluster) => {
-            if (originalCluster.files.length > clusterMaxSize && !originalCluster.isUnclusterable) {
-                let l = originalCluster.path.length // next path segment index
-                let mf = mostFrequent(originalCluster.files.map(it => it.arr[l] || "$$$notfound$$$"))
-                let newClusterFiles: FileInfo[] = []
-                let remainingFiles = originalCluster.files.filter(it => {
-                    let nextPathSegment = it.arr[l];
-                    if (nextPathSegment === mf) {
-                        newClusterFiles.push(it)
-                        return false
-                    } else {
-                        return true
-                    }
-                });
+            let subclusters = clusterFiles1(originalCluster, clusterMaxSize, clusterMinSize);
+            if (subclusters !== null) {
                 changes = true;
-                if (remainingFiles.length === 0) {
-                    return [
-                        {
-                            path: originalCluster.path.concat([mf]),
-                            files: newClusterFiles,
-                            isLeftovers: false
-                        } as Cluster
-                    ];
-                }
-                if (newClusterFiles.length < clusterMinSize || remainingFiles.length < clusterMinSize) {
-                    return [{...originalCluster, isUnclusterable: true} as Cluster];
-                }
-                return [
-                    {
-                        path: originalCluster.path.concat([mf]),
-                        files: newClusterFiles,
-                        isLeftovers: false
-                    } as Cluster,
-                    {
-                        path: originalCluster.path,
-                        files: remainingFiles,
-                        isLeftovers: true
-                    } as Cluster
-                ];
-            } else {
-                return [originalCluster]
+                return subclusters
             }
+            return originalCluster
         })
     }
     return clusterGroups.map((cluster) => {
