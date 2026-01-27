@@ -1,4 +1,6 @@
-import {clusterFiles} from "../../src/util/file_tree_clustering";
+import {clusterFiles, FileInfo, graph} from "../../src/util/file_tree_clustering";
+import buildGraph = graph.buildGraph;
+import collect = graph.collect;
 
 describe('test cluster files', () => {
     it('empty list', () => {
@@ -25,6 +27,12 @@ describe('test cluster files', () => {
             "src/test/java/BarTest.java",
             "src/test/java/BazTest.java",
             ".gitignore"
+        ]
+        const files2 = [
+            "src/main/java/:3",
+            "src/main/resources/:1",
+            "src/test/java/:3",
+            ":1"
         ]
         let clustered = clusterFiles(files, 5, 1);
         expect(clustered).toStrictEqual([
@@ -111,7 +119,7 @@ describe('test cluster files', () => {
             "src/main/java/foo/bar/Xyz.java",
             "src/main/java/buz/Iop.java",
             "src/main/java/fgh/Jkl.java",
-            "src/main/java/Mko.java",
+            "src/Mko.java",
         ]
         let clustered = clusterFiles(files, 5, 2);
         expect(clustered).toStrictEqual([
@@ -127,9 +135,78 @@ describe('test cluster files', () => {
                 files: [
                     "src/main/java/buz/Iop.java",
                     "src/main/java/fgh/Jkl.java",
-                    "src/main/java/Mko.java",
-                ], path: "src/main/java", weight: 3, isLeftovers: true
+                    "src/Mko.java",
+                ], path: "src/", weight: 3, isLeftovers: true
             }
+        ]);
+    })
+    it('manyLeftovers', () => {
+        const files = [
+            "d0/d1/d2/d3/d4/d5/d6/d7/F8.java",
+            "d0/d1/d2/d3/d4/d5/d6/F7.java",
+            "d0/d1/d2/d3/d4/d5/F6.java",
+            "d0/d1/d2/d3/d4/F5.java",
+            "d0/d1/d2/d3/F4.java",
+            "d0/d1/d2/F3.java",
+            "d0/d1/F2.java",
+            "d0/F1.java",
+            "F0.java",
+        ]
+        let clustered = clusterFiles(files, 5, 2);
+        expect(clustered).toStrictEqual([
+            {
+                files: [
+                    "d0/d1/d2/d3/d4/d5/d6/d7/F8.java",
+                    "d0/d1/d2/d3/d4/d5/d6/F7.java",
+                    "d0/d1/d2/d3/d4/d5/F6.java",
+                    "d0/d1/d2/d3/d4/F5.java",
+                    "d0/d1/d2/d3/F4.java",
+                ], path: "d0/d1/d2/d3", weight: 5, isLeftovers: false
+            },
+            {
+                files: [
+                    "d0/d1/d2/F3.java",
+                    "d0/d1/F2.java",
+                    "d0/F1.java",
+                    "F0.java",
+                ], path: "", weight: 4, isLeftovers: true
+            }
+        ]);
+    })
+
+
+    it('g', () => {
+        const files = [
+            "d0/d1/d2/d3/d4/d5/d6/d7/F8.java",
+            "d0/d1/d2/d3/d4/d5/d6/F7.java",
+            "d0/d1/d2/d3/d4/d5/F6.java",
+            "d0/d1/d2/d3/d4/F5.java",
+            "d0/d1/d2/d3/F4.java",
+            "d0/d1/d2/F3.java",
+            "d0/d1/F2.java",
+            "d0/F1.java",
+            "F0.java",
+        ]
+        let g = buildGraph(files.map(it => ({arr: it.split("/"), str: it} as FileInfo)));
+        graph.bubbleMicroLeftoversRecursive(g, 5, 2);
+        let c = collect(g).map(it => [it.path.join("/"), it.value.map(it => it.str)]).filter(it => it[1].length > 0);
+        console.log(JSON.stringify(c, null, 2))
+        expect(c).toStrictEqual([
+            ["", [
+                "F0.java",
+                "d0/F1.java"
+            ]],
+            ["d0/d1", [
+                "d0/d1/F2.java",
+                "d0/d1/d2/F3.java"
+            ]],
+            ["d0/d1/d2/d3", [
+                "d0/d1/d2/d3/F4.java",
+                "d0/d1/d2/d3/d4/F5.java",
+                "d0/d1/d2/d3/d4/d5/F6.java",
+                "d0/d1/d2/d3/d4/d5/d6/F7.java",
+                "d0/d1/d2/d3/d4/d5/d6/d7/F8.java"
+            ]]
         ]);
     })
 });
