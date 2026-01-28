@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+// @ts-ignore
 import htmlTemplate from '../../html-ui/dist/index.html';
 import {DataRow} from "../base/types";
 
