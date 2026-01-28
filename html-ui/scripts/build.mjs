@@ -13,8 +13,9 @@ const [template, css, js] = await Promise.all([
 ]);
 
 const html = template
-  .replace("__INLINE_CSS__", css.trim())
-  .replace("__INLINE_JS__", js.trim());
+  // Use function form so $ in CSS/JS isn't treated as a replace token.
+  .replace("__INLINE_CSS__", () => css.trim())
+  .replace("__INLINE_JS__", () => js.trim());
 
 await mkdir(dirname(outPath), { recursive: true });
 await writeFile(outPath, html, "utf8");

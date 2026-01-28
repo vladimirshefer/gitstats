@@ -1,7 +1,7 @@
 import {h, render} from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import Plotly from "plotly.js-basic-dist-min";
 
+const Plotly = window.Plotly
 const RAW_DATASET = (window as any)?.RAW_DATASET
 // Fixed schema as per pipeline: [author, days_bucket, lang, clusterPath, repoName, count]
 const RAW_DATASET_SCHEMA = [

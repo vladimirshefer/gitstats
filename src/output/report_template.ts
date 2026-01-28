@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import htmlTemplate from './report_template.html';
+import htmlTemplate from '../../html-ui/dist/index.html';
 import {DataRow} from "../base/types";
 
 /**

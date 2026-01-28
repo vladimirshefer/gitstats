@@ -15,7 +15,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "node build.mjs",
+    "build": "npm --prefix html-ui run build && node build.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

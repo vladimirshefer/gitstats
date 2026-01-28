@@ -11,11 +11,11 @@
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
     "@types/plotly.js-basic-dist-min": "^2.12.4",
+    "plotly.js-basic-dist-min": "^2.33.0",
     "esbuild": "^0.20.2",
     "tailwindcss": "^4.1.0"
   },
   "dependencies": {
-    "plotly.js-basic-dist-min": "^2.33.0",
     "preact": "^10.22.0"
   }
 }
