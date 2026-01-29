@@ -1,13 +1,11 @@
 import {h, render} from "preact";
 import {useEffect, useMemo, useRef, useState} from "preact/hooks";
 import {COLUMNS_AMOUNT, COLUMNS_IDX_ARRAY, RAW_DATASET, RAW_DATASET_SCHEMA, UNIQUE_VALUES} from "./data";
+import {MultiSelect} from "./MultiSelect";
 
 const Plotly = window.Plotly
 export const CLUSTER_COLUMN = RAW_DATASET_SCHEMA.indexOf("clusterPath");
 export const REPO_COLUMN = RAW_DATASET_SCHEMA.indexOf("repoName");
-export const KEY_INDEX = Object.fromEntries(
-  RAW_DATASET_SCHEMA.map((k, i) => [k, i])
-);
 
 function matchesFilters(row: unknown[], filters: Record<number, Set<string>>) {
   for (let idx = 0; idx < COLUMNS_AMOUNT; idx++) {
@@ -279,128 +277,6 @@ function SunburstPaths({
   return <div ref={containerRef} className="w-full" />;
 }
 
-function MultiSelect({
-  label,
-  values,
-  selectedSet,
-  onChange
-}: {
-  label: string;
-  values: unknown[];
-  selectedSet: Set<string>;
-  onChange: (value: Set<string>) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredValues = useMemo(() => {
-    if (!searchTerm) return values;
-    const lower = searchTerm.toLowerCase();
-    return values.filter((v) => String(v).toLowerCase().includes(lower));
-  }, [values, searchTerm]);
-
-  const selCount = selectedSet.size;
-  const total = values.length;
-
-  const toggleValue = (val: string) => {
-    const newSet = new Set(selectedSet);
-    if (newSet.has(val)) {
-      newSet.delete(val);
-    } else {
-      newSet.add(val);
-    }
-    onChange(newSet);
-  };
-
-  return (
-    <div ref={dropdownRef} className="relative">
-      <label className="block font-semibold mb-1.5">
-        {label} <span className="text-gray-600 font-normal">({selCount}/{total})</span>
-      </label>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      >
-        <span className="text-gray-700">
-          {selCount === 0
-            ? "Select..."
-            : selCount === total
-            ? "All selected"
-            : `${selCount} selected`}
-        </span>
-        <span className="float-right">▼</span>
-      </button>
-      {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-80 overflow-hidden">
-          <div className="p-2 border-b border-gray-200">
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm((e.target as HTMLInputElement).value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <div className="flex gap-2 mt-2">
-              <button
-                type="button"
-                onClick={() => onChange(new Set(values.map(String)))}
-                className="flex-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                Select All
-              </button>
-              <button
-                type="button"
-                onClick={() => onChange(new Set())}
-                className="flex-1 px-3 py-1.5 text-sm bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
-              >
-                Unselect All
-              </button>
-            </div>
-          </div>
-          <div className="overflow-y-auto max-h-64">
-            {filteredValues.length === 0 ? (
-              <div className="px-3 py-2 text-gray-500 text-center">No matches found</div>
-            ) : (
-              filteredValues.map((v) => {
-                const val = String(v);
-                const isChecked = selectedSet.has(val);
-                return (
-                  <label
-                    key={val}
-                    className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleValue(val)}
-                      className="mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-gray-900">{val}</span>
-                  </label>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function App() {
   const { initialFilters, valueOptions } = useMemo(() => {
     const filters: Record<number, Set<string>> = {};
@@ -416,52 +292,21 @@ function App() {
   const [secondaryKeyIndex, setSecondaryKeyIndex] = useState(1);
 
   return (
-    <div className="max-w-4xl mx-auto my-5 p-5 bg-white rounded-lg shadow-sm">
-      <h1 className="border-b border-gray-300 pb-2.5">Git Contribution Statistics</h1>
-      <div className="controls">
-        <h2 className="border-b border-gray-300 pb-2.5">Controls</h2>
-        <div className="flex gap-4 flex-wrap items-center">
-          <label>
-            Primary group:
-            <select
-              value={primaryKeyIndex}
-              onChange={(e) => setPrimaryKeyIndex(Number((e.target as HTMLSelectElement).value))}
-            >
-              {COLUMNS_IDX_ARRAY.map((__, i) => (
-                <option key={i} value={i}>
-                  {RAW_DATASET_SCHEMA[i]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Secondary group:
-            <select
-              value={secondaryKeyIndex}
-              onChange={(e) => setSecondaryKeyIndex(Number((e.target as HTMLSelectElement).value))}
-            >
-              {COLUMNS_IDX_ARRAY.map((__, i) => (
-                <option key={i} value={i}>
-                  {RAW_DATASET_SCHEMA[i]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div
-          id="filters"
-          className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3"
-        >
-          {COLUMNS_IDX_ARRAY.map((__, idx) => (
-            <MultiSelect
-              key={idx}
-              label={RAW_DATASET_SCHEMA[idx]}
-              values={valueOptions[idx]}
-              selectedSet={filters[idx]}
-              onChange={(newSet) => setFilters((prev) => ({ ...prev, [idx]: newSet }))}
-            />
-          ))}
-        </div>
+    <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm">
+      <h1 className="border-gray-300 text-xl">Git Contribution Statistics</h1>
+      <div
+        id="filters"
+        className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3"
+      >
+        {COLUMNS_IDX_ARRAY.map((__, idx) => (
+          <MultiSelect
+            key={idx}
+            label={RAW_DATASET_SCHEMA[idx]}
+            values={valueOptions[idx]}
+            selectedSet={filters[idx]}
+            onChange={(newSet) => setFilters((prev) => ({ ...prev, [idx]: newSet }))}
+          />
+        ))}
       </div>
       <div className="mt-8">
         <h2 className="border-b border-gray-300 pb-2.5">Column Totals</h2>
@@ -501,6 +346,3 @@ const root = document.getElementById("root");
 if (root) {
   render(<App />, root);
 }
-
-// Keep the symbol so template injection continues to work.
-void KEY_INDEX;
