@@ -334,14 +334,19 @@ function App() {
           <Chart
               data={[
                 {
-                  x: datesData.map(it => it[0]+"_"),
+                  x: datesData.map(it => it[0]),
                   y: datesData.map(it => it[1]),
                   type: 'scatter',
+                  line: {
+                    shape: 'spline',
+                    smoothing: 1.3   // 0–1.3 (higher = smoother)
+                  }
                 }
               ]}
               layout={{
                 xaxis: {
                   visible: false,
+                  type: 'category' // prevent converting to numbers
                 },
                 yaxis: {
                   visible: false
@@ -354,10 +359,10 @@ function App() {
                   b: 0,
                   pad: 0
                 },
-                line: {
-                  shape: 'spline',
-                  smoothing: 1.3   // 0–1.3 (higher = smoother)
-                }
+                bargap: 0,
+                bargroupgap: 0,
+                selectdirection: 'h',  // horizontal-only
+                zoomdirection: 'x',    // x-only
               }}
               config={{
                 displayModeBar: false,
