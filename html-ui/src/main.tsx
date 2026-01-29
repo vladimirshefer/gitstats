@@ -288,8 +288,6 @@ function App() {
     return { initialFilters: filters, valueOptions: options };
   }, []);
   const [filters, setFilters] = useState(initialFilters);
-  const [primaryKeyIndex, setPrimaryKeyIndex] = useState(0);
-  const [secondaryKeyIndex, setSecondaryKeyIndex] = useState(1);
 
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm">
