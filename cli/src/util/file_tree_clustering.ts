@@ -78,7 +78,6 @@ export namespace graph {
                     child.value = []
                     if (child.size === 0) {
                         delete graphNode.children[k];
-                        console.error('delete', graphNode.path, k)
                         result = true
                     }
                 }
@@ -104,7 +103,6 @@ export namespace graph {
             graphNode.value.push(...flatten(child));
             graphNode.size++;
             delete graphNode.children[k];
-            console.error('delete', graphNode.path, k)
             return true
         }
         return false

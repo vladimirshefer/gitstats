@@ -23,3 +23,6 @@ function uniqueValues(arr: unknown[][], idx: number) {
     const set = new Set(arr.map((r) => r[idx]));
     return Array.from(set);
 }
+
+export const CLUSTER_COLUMN = RAW_DATASET_SCHEMA.indexOf("clusterPath");
+export const REPO_COLUMN = RAW_DATASET_SCHEMA.indexOf("repoName");
